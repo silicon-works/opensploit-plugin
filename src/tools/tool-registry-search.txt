@@ -1,0 +1,23 @@
+Search the security tool registry to discover available MCP tools for penetration testing.
+
+IMPORTANT: This is the ONLY mechanism for discovering available tools. Agents do not have hardcoded knowledge of tools - all discovery happens through this registry search.
+
+Usage:
+- Search by natural language: "port scanning", "SQL injection", "brute force login"
+- Filter by phase: reconnaissance, enumeration, exploitation, post-exploitation
+- Filter by capability: sql_injection, port_scanning, web_fuzzing, password_cracking
+
+The search returns:
+- Tool name, description, and MCP image
+- Available methods with parameters and return values
+- Routing guidance (when to use, when NOT to use, alternatives)
+- Phase and capability tags
+- Anti-pattern warnings when query matches inappropriate tool usage
+
+Examples:
+- query: "scan for open ports" → nmap, masscan
+- query: "SQL injection testing" → sqlmap (with warning if curl is in results)
+- query: "directory brute force", phase: "enumeration" → ffuf, gobuster
+- query: "crack passwords", capability: "password_cracking" → hydra, john
+
+After receiving results, invoke the discovered tools via their MCP interfaces using the tool ID and method name.
