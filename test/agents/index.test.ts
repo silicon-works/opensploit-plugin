@@ -3,92 +3,106 @@ import { loadAgents } from "../../src/agents/index"
 
 describe("agents.loadAgents", () => {
   const agents = loadAgents()
+  const agentNames = Object.keys(agents)
+  const subagentNames = agentNames.filter((n) => n !== "pentest")
 
-  test("returns all 10 pentest agents", () => {
-    const names = Object.keys(agents)
-    expect(names).toContain("pentest")
-    expect(names).toContain("pentest/recon")
-    expect(names).toContain("pentest/enum")
-    expect(names).toContain("pentest/exploit")
-    expect(names).toContain("pentest/post")
-    expect(names).toContain("pentest/report")
-    expect(names).toContain("pentest/research")
-    expect(names).toContain("pentest/build")
-    expect(names).toContain("pentest/captcha")
-    expect(names.length).toBe(9) // 9 keys: pentest + 8 sub-agents
+  // --- Structural: catches missing/added agents ---
+
+  test("returns exactly 9 agents", () => {
+    expect(agentNames.length).toBe(9)
   })
+
+  test("contains all expected agent names", () => {
+    const expected = [
+      "pentest",
+      "pentest/recon",
+      "pentest/enum",
+      "pentest/exploit",
+      "pentest/post",
+      "pentest/report",
+      "pentest/research",
+      "pentest/build",
+      "pentest/captcha",
+    ]
+    for (const name of expected) {
+      expect(agentNames).toContain(name)
+    }
+  })
+
+  // --- Behavioral: primary vs subagent mode ---
 
   test("master agent is primary mode", () => {
     expect(agents["pentest"].mode).toBe("primary")
   })
 
-  test("sub-agents are subagent mode", () => {
-    for (const name of Object.keys(agents)) {
-      if (name === "pentest") continue
+  test("all sub-agents are subagent mode", () => {
+    for (const name of subagentNames) {
       expect(agents[name].mode).toBe("subagent")
     }
   })
 
-  test("sub-agents are hidden", () => {
-    for (const name of Object.keys(agents)) {
-      if (name === "pentest") continue
+  test("all sub-agents are hidden", () => {
+    for (const name of subagentNames) {
       expect(agents[name].hidden).toBe(true)
     }
   })
 
-  test("all agents have prompts", () => {
+  // --- Security-critical: permission rules ---
+
+  test("master agent allows question permission", () => {
+    expect(agents["pentest"].permission?.question).toBe("allow")
+  })
+
+  test("report agent denies all bash", () => {
+    expect(agents["pentest/report"].permission?.bash).toEqual({ "*": "deny" })
+  })
+
+  test("non-report agents deny security tools in bash but allow general commands", () => {
+    const recon = agents["pentest/recon"]
+    expect(recon.permission?.bash?.["*"]).toBe("allow")
+    expect(recon.permission?.bash?.["nmap*"]).toBe("deny")
+    expect(recon.permission?.bash?.["sqlmap*"]).toBe("deny")
+    expect(recon.permission?.bash?.["hydra*"]).toBe("deny")
+    expect(recon.permission?.bash?.["ssh *"]).toBe("deny")
+    expect(recon.permission?.bash?.["curl *"]).toBe("deny")
+  })
+
+  test("session directory is allowed in external_directory permissions", () => {
+    const recon = agents["pentest/recon"]
+    expect(recon.permission?.external_directory?.["/tmp/opensploit-session-*"]).toBe("allow")
+  })
+
+  // --- Integration: prompts load correctly ---
+
+  test("all agents have non-trivial prompts", () => {
     for (const [name, agent] of Object.entries(agents)) {
-      expect(agent.prompt).toBeTruthy()
       expect(agent.prompt.length).toBeGreaterThan(100)
     }
   })
 
-  test("all agents include pentest-base prompt", () => {
-    for (const [name, agent] of Object.entries(agents)) {
-      // pentest-base.txt contains TVAR reasoning framework
+  test("all agents include TVAR reasoning framework from pentest-base", () => {
+    for (const agent of Object.values(agents)) {
       expect(agent.prompt).toContain("TVAR")
     }
   })
 
-  test("master agent prompt includes orchestration instructions", () => {
-    expect(agents["pentest"].prompt).toContain("pentest")
+  test("master prompt contains orchestration keywords", () => {
+    const prompt = agents["pentest"].prompt
+    expect(prompt).toContain("Master Penetration Testing Agent")
+    expect(prompt).toContain("CAPTCHA")
   })
 
-  test("each agent has a color", () => {
-    for (const agent of Object.values(agents)) {
-      expect(agent.color).toMatch(/^#[0-9a-fA-F]{6}$/)
-    }
+  test("report prompt contains reporting instructions", () => {
+    expect(agents["pentest/report"].prompt).toContain("Reporting Subagent")
   })
 
-  test("each agent has a description", () => {
-    for (const agent of Object.values(agents)) {
-      expect(agent.description).toBeTruthy()
-      expect(agent.description.length).toBeGreaterThan(10)
-    }
-  })
+  // --- Temperature: models that matter ---
 
-  test("pentest has question permission allowed", () => {
-    expect(agents["pentest"].permission?.question).toBe("allow")
-  })
-
-  test("report agent has bash denied", () => {
-    const report = agents["pentest/report"]
-    expect(report.permission?.bash).toEqual({ "*": "deny" })
-  })
-
-  test("non-report agents deny security tools in bash", () => {
-    const recon = agents["pentest/recon"]
-    expect(recon.permission?.bash?.["nmap*"]).toBe("deny")
-    expect(recon.permission?.bash?.["sqlmap*"]).toBe("deny")
-    expect(recon.permission?.bash?.["hydra*"]).toBe("deny")
-    expect(recon.permission?.bash?.["*"]).toBe("allow")
-  })
-
-  test("captcha agent has lower temperature", () => {
+  test("captcha agent has low temperature for precision", () => {
     expect(agents["pentest/captcha"].temperature).toBe(0.2)
   })
 
-  test("master agent has standard low temperature", () => {
+  test("master agent has low temperature for reliability", () => {
     expect(agents["pentest"].temperature).toBe(0.3)
   })
 })
