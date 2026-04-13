@@ -7,6 +7,7 @@ import { createHostsTool } from "./tools/hosts.js"
 import { createToolRegistrySearchTool } from "./tools/tool-registry-search.js"
 import { createPatternSearchTool } from "./tools/pattern-search.js"
 import { createSavePatternTool } from "./tools/save-pattern.js"
+import { systemTransformHook } from "./hooks/system-transform.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -47,9 +48,7 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
       // TODO Phase 5: trajectory recording, post-compaction re-injection
     },
 
-    "experimental.chat.system.transform": async (input, output) => {
-      // TODO Phase 5: inject engagement state into all agent prompts
-    },
+    "experimental.chat.system.transform": systemTransformHook,
 
     "tool.execute.before": async (input, output) => {
       // TODO Phase 5: /session/ path rewriting, bash blocking, target validation
