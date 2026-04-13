@@ -1,8 +1,15 @@
-const isTest = process.env["OPENSPLOIT_TEST"] === "true"
+/**
+ * Lightweight logger for the opensploit plugin.
+ *
+ * Silent by default — OpenCode's TUI owns the terminal, so writing to
+ * stderr corrupts the display. Enable with OPENSPLOIT_DEBUG=true for
+ * development/troubleshooting.
+ */
+const isDebug = process.env["OPENSPLOIT_DEBUG"] === "true"
 
 export function createLog(name: string) {
   const noop = (..._args: any[]) => {}
-  if (isTest) {
+  if (!isDebug) {
     return { info: noop, warn: noop, error: noop, debug: noop }
   }
   return {
