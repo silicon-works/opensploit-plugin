@@ -2,6 +2,8 @@ import type { Plugin, Config } from "@opencode-ai/plugin"
 import { loadAgents } from "./agents/index.js"
 import { createMcpTool } from "./tools/mcp-tool.js"
 import { createUpdateEngagementStateTool, createReadEngagementStateTool } from "./tools/engagement-state.js"
+import { createBrowserHeadedTool } from "./tools/browser-headed.js"
+import { createHostsTool } from "./tools/hosts.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -33,7 +35,9 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
       mcp_tool: createMcpTool(),
       update_engagement_state: createUpdateEngagementStateTool(),
       read_engagement_state: createReadEngagementStateTool(),
-      // TODO: tool_registry_search, hosts, browser_headed, pattern tools
+      browser_headed_mode: createBrowserHeadedTool(),
+      hosts: createHostsTool(),
+      // TODO: tool_registry_search, pattern tools
     },
 
     event: async ({ event }) => {
