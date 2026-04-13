@@ -8,6 +8,7 @@ import { createToolRegistrySearchTool } from "./tools/tool-registry-search.js"
 import { createPatternSearchTool } from "./tools/pattern-search.js"
 import { createSavePatternTool } from "./tools/save-pattern.js"
 import { systemTransformHook } from "./hooks/system-transform.js"
+import { toolBeforeHook } from "./hooks/tool-before.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -50,9 +51,7 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
 
     "experimental.chat.system.transform": systemTransformHook,
 
-    "tool.execute.before": async (input, output) => {
-      // TODO Phase 5: /session/ path rewriting, bash blocking, target validation
-    },
+    "tool.execute.before": toolBeforeHook,
 
     "tool.execute.after": async (input, output) => {
       // TODO Phase 5: output store interception
