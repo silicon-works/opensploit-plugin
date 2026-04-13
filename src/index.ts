@@ -5,6 +5,8 @@ import { createUpdateEngagementStateTool, createReadEngagementStateTool } from "
 import { createBrowserHeadedTool } from "./tools/browser-headed.js"
 import { createHostsTool } from "./tools/hosts.js"
 import { createToolRegistrySearchTool } from "./tools/tool-registry-search.js"
+import { createPatternSearchTool } from "./tools/pattern-search.js"
+import { createSavePatternTool } from "./tools/save-pattern.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -39,7 +41,8 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
       browser_headed_mode: createBrowserHeadedTool(),
       hosts: createHostsTool(),
       tool_registry_search: createToolRegistrySearchTool(),
-      // TODO: pattern tools
+      pattern_search: createPatternSearchTool(),
+      save_pattern: createSavePatternTool(),
     },
 
     event: async ({ event }) => {
