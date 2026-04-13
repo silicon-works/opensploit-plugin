@@ -466,6 +466,7 @@ describe("plugin structure", () => {
 
     expect(hooks.config).toBeTypeOf("function")
     expect(hooks.event).toBeTypeOf("function")
+    expect(hooks["chat.message"]).toBeTypeOf("function")
     expect(hooks["experimental.chat.system.transform"]).toBeTypeOf("function")
     expect(hooks["tool.execute.before"]).toBeTypeOf("function")
     // tool.execute.after: not needed — output store is called inside mcp_tool.execute() directly
