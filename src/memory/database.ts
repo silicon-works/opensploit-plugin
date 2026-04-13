@@ -8,6 +8,11 @@
  * - Idempotent initialization (safe to call multiple times)
  */
 
+// Suppress LanceDB Rust-level warnings that corrupt the TUI (writes to stderr)
+if (!process.env["LANCE_LOG"]) {
+  process.env["LANCE_LOG"] = "error"
+}
+
 import * as lancedb from "@lancedb/lancedb"
 import * as fs from "fs/promises"
 import * as path from "path"
