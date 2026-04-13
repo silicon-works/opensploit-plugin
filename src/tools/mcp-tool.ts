@@ -191,7 +191,14 @@ export function createMcpTool() {
     async execute(params, ctx: ToolContext): Promise<string> {
       const toolName = params.tool
       const method = params.method
-      const args: Record<string, unknown> = params.arguments ? JSON.parse(params.arguments) : {}
+      let args: Record<string, unknown> = {}
+      if (params.arguments) {
+        try {
+          args = JSON.parse(params.arguments)
+        } catch (e) {
+          return `Invalid JSON in arguments: ${e instanceof Error ? e.message : String(e)}\n\nExpected valid JSON object, e.g.: {"target": "10.10.10.1", "ports": "1-1000"}`
+        }
+      }
       const agentTimeout = params.timeout
       const clock_offset = params.clock_offset
       const sessionId = ctx.sessionID

@@ -6,7 +6,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const promptDir = join(__dirname, "prompts")
 
 function readPrompt(name: string): string {
-  return readFileSync(join(promptDir, name), "utf-8")
+  const fullPath = join(promptDir, name)
+  try {
+    return readFileSync(fullPath, "utf-8")
+  } catch (e) {
+    throw new Error(
+      `Failed to read agent prompt file: ${fullPath}\n` +
+      `Ensure the @opensploit/core package includes the prompts directory.\n` +
+      `Original error: ${e instanceof Error ? e.message : String(e)}`
+    )
+  }
 }
 
 /**
