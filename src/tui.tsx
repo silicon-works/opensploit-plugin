@@ -1,8 +1,21 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { createSignal } from "solid-js"
 import { toggleUltrasploit, isUltrasploitEnabled } from "./hooks/ultrasploit"
 
 const tui: TuiPlugin = async (api, options, meta) => {
+  // Restore state from kv on load
+  const saved = api.kv.get<boolean>("opensploit.ultrasploit", false)
+  if (saved) {
+    const { setUltrasploit } = await import("./hooks/ultrasploit")
+    setUltrasploit(true)
+  }
+
+  // Reactive signal tracks ultrasploit state for the sidebar indicator
+  const [ultrasploitActive, setUltrasploitActive] = createSignal(
+    saved || isUltrasploitEnabled(),
+  )
+
   api.command.register(() => [
     {
       title: "Toggle Ultrasploit mode",
@@ -14,6 +27,7 @@ const tui: TuiPlugin = async (api, options, meta) => {
       },
       onSelect() {
         const nowEnabled = toggleUltrasploit()
+        setUltrasploitActive(nowEnabled)
         api.kv.set("opensploit.ultrasploit", nowEnabled)
         api.ui.toast({
           variant: nowEnabled ? "warning" : "info",
@@ -26,12 +40,20 @@ const tui: TuiPlugin = async (api, options, meta) => {
     },
   ])
 
-  // Restore state from kv on load
-  const saved = api.kv.get<boolean>("opensploit.ultrasploit", false)
-  if (saved) {
-    const { setUltrasploit } = await import("./hooks/ultrasploit")
-    setUltrasploit(true)
-  }
+  // Sidebar footer: show ultrasploit indicator when active
+  api.slots.register({
+    order: 0,
+    slots: {
+      sidebar_footer() {
+        if (!ultrasploitActive()) return null
+        return (
+          <text fg={api.theme.current.warning}>
+            <b>{"\u26A1"} ULTRASPLOIT</b>
+          </text>
+        )
+      },
+    },
+  })
 
   api.lifecycle.onDispose(() => {
     // cleanup if needed

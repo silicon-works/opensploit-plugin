@@ -30,32 +30,38 @@ export async function systemTransformHook(
   input: { sessionID?: string; model: any },
   output: { system: string[] },
 ): Promise<void> {
-  if (!input.sessionID) return
+  try {
+    if (!input.sessionID) return
 
-  const rootSessionID = getRootSession(input.sessionID)
+    const rootSessionID = getRootSession(input.sessionID)
 
-  // Get engagement state formatted for injection
-  const engagementState = await getEngagementStateForInjection(rootSessionID)
+    // Get engagement state formatted for injection
+    const engagementState = await getEngagementStateForInjection(rootSessionID)
 
-  if (!engagementState) return // No state yet — nothing to inject
+    if (!engagementState) return // No state yet — nothing to inject
 
-  // Build the injection block
-  const parts: string[] = []
+    // Build the injection block
+    const parts: string[] = []
 
-  // Session directory (if it exists)
-  if (SessionDirectory.exists(rootSessionID)) {
-    const sessionDir = SessionDirectory.get(rootSessionID)
-    parts.push(`## Session Working Directory\n${sessionDir}`)
-  }
+    // Session directory (if it exists)
+    if (SessionDirectory.exists(rootSessionID)) {
+      const sessionDir = SessionDirectory.get(rootSessionID)
+      parts.push(`## Session Working Directory\n${sessionDir}`)
+    }
 
-  // Engagement state (ports, creds, vulns, attack plan, failed attempts, etc.)
-  parts.push(engagementState)
+    // Engagement state (ports, creds, vulns, attack plan, failed attempts, etc.)
+    parts.push(engagementState)
 
-  if (parts.length > 0) {
-    output.system.push(parts.join("\n\n"))
-    log.info("injected engagement state", {
-      sessionID: input.sessionID.slice(-8),
-      rootSessionID: rootSessionID.slice(-8),
+    if (parts.length > 0) {
+      output.system.push(parts.join("\n\n"))
+      log.info("injected engagement state", {
+        sessionID: input.sessionID.slice(-8),
+        rootSessionID: rootSessionID.slice(-8),
+      })
+    }
+  } catch (error) {
+    log.error("hook failed, proceeding without modification", {
+      error: error instanceof Error ? error.message : String(error),
     })
   }
 }
