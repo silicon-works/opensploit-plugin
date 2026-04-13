@@ -9,6 +9,7 @@ import { createPatternSearchTool } from "./tools/pattern-search.js"
 import { createSavePatternTool } from "./tools/save-pattern.js"
 import { systemTransformHook } from "./hooks/system-transform.js"
 import { toolBeforeHook } from "./hooks/tool-before.js"
+import { permissionHook } from "./hooks/permission.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -57,9 +58,7 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
       // TODO Phase 5: output store interception
     },
 
-    "permission.ask": async (input, output) => {
-      // TODO Phase 5: ultrasploit auto-approve
-    },
+    "permission.ask": permissionHook,
 
     "experimental.session.compacting": async (input, output) => {
       // TODO Phase 5: preserve objective + todos

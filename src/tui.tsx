@@ -1,8 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
+import { toggleUltrasploit, isUltrasploitEnabled } from "./hooks/ultrasploit"
 
 const tui: TuiPlugin = async (api, options, meta) => {
-  // Register opensploit-specific commands
   api.command.register(() => [
     {
       title: "Toggle Ultrasploit mode",
@@ -13,20 +13,25 @@ const tui: TuiPlugin = async (api, options, meta) => {
         name: "ultrasploit",
       },
       onSelect() {
-        // TODO: toggle ultrasploit state via kv
-        const current = api.kv.get<boolean>("opensploit.ultrasploit", false)
-        api.kv.set("opensploit.ultrasploit", !current)
+        const nowEnabled = toggleUltrasploit()
+        api.kv.set("opensploit.ultrasploit", nowEnabled)
         api.ui.toast({
-          variant: current ? "info" : "warning",
+          variant: nowEnabled ? "warning" : "info",
           title: "Ultrasploit",
-          message: current ? "Disabled" : "Enabled — all permissions auto-approved",
+          message: nowEnabled
+            ? "Enabled — all permissions auto-approved"
+            : "Disabled",
         })
       },
     },
   ])
 
-  // TODO Phase 5: sidebar engagement state widget via api.slots.register()
-  // TODO Phase 5: home_logo slot for OpenSploit branding
+  // Restore state from kv on load
+  const saved = api.kv.get<boolean>("opensploit.ultrasploit", false)
+  if (saved) {
+    const { setUltrasploit } = await import("./hooks/ultrasploit")
+    setUltrasploit(true)
+  }
 
   api.lifecycle.onDispose(() => {
     // cleanup if needed
