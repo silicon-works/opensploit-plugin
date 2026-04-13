@@ -1224,6 +1224,40 @@ function formatOutput(result: ToolSearchResult): string {
 // Tool Definition
 // =============================================================================
 
+// =============================================================================
+// Exports for testing
+// =============================================================================
+
+export {
+  calculateTriggerBonus,
+  calculateUseForBonus,
+  calculateNeverUseForPenalty,
+  checkAntiPatterns,
+  normalizeNeverUseFor,
+  extractSuggestedAlternatives,
+  formatToolResult,
+  formatToolResultWithSuggestion,
+  formatOutput,
+  searchToolsInMemory,
+  mergeSessionRecipes,
+  isCacheStale,
+  scoreAndGroupMethods,
+  RegistrySchema,
+  RegistryToolSchema,
+  VALID_PHASES,
+  REGISTRY_CONFIG,
+}
+export type {
+  Registry,
+  RegistryTool,
+  ToolResult,
+  ToolSearchResult,
+  ToolMethodResult,
+  NeverUseForEntry,
+  ToolWithMethods,
+  ScoredMethod,
+}
+
 export function createToolRegistrySearchTool() {
   return tool({
     description: DESCRIPTION,
