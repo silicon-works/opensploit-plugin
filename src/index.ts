@@ -11,6 +11,7 @@ import { systemTransformHook } from "./hooks/system-transform.js"
 import { toolBeforeHook } from "./hooks/tool-before.js"
 import { permissionHook } from "./hooks/permission.js"
 import { compactionHook } from "./hooks/compaction.js"
+import { eventHook } from "./hooks/event.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -47,17 +48,14 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
       save_pattern: createSavePatternTool(),
     },
 
-    event: async ({ event }) => {
-      // TODO Phase 5: trajectory recording, post-compaction re-injection
-    },
+    event: eventHook,
 
     "experimental.chat.system.transform": systemTransformHook,
 
     "tool.execute.before": toolBeforeHook,
 
-    "tool.execute.after": async (input, output) => {
-      // TODO Phase 5: output store interception
-    },
+    // tool.execute.after: Output store interception is handled INSIDE mcp_tool.execute()
+    // directly (line 395 of mcp-tool.ts). No separate hook needed.
 
     "permission.ask": permissionHook,
 

@@ -468,7 +468,7 @@ describe("plugin structure", () => {
     expect(hooks.event).toBeTypeOf("function")
     expect(hooks["experimental.chat.system.transform"]).toBeTypeOf("function")
     expect(hooks["tool.execute.before"]).toBeTypeOf("function")
-    expect(hooks["tool.execute.after"]).toBeTypeOf("function")
+    // tool.execute.after: not needed — output store is called inside mcp_tool.execute() directly
     expect(hooks["permission.ask"]).toBeTypeOf("function")
     expect(hooks["experimental.session.compacting"]).toBeTypeOf("function")
   })
