@@ -12,6 +12,7 @@ import { toolBeforeHook } from "./hooks/tool-before.js"
 import { permissionHook } from "./hooks/permission.js"
 import { compactionHook } from "./hooks/compaction.js"
 import { eventHook } from "./hooks/event.js"
+import { chatMessageHook } from "./hooks/chat-message.js"
 
 /**
  * OpenSploit - Autonomous penetration testing plugin for OpenCode.
@@ -49,6 +50,8 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
     },
 
     event: eventHook,
+
+    "chat.message": chatMessageHook,
 
     "experimental.chat.system.transform": systemTransformHook,
 
