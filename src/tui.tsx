@@ -2,6 +2,7 @@
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createSignal } from "solid-js"
 import { toggleUltrasploit, isUltrasploitEnabled } from "./hooks/ultrasploit"
+import { createUltrasploitPostProcess } from "./tui-rainbow"
 
 const tui: TuiPlugin = async (api, options, meta) => {
   // Restore state from kv on load
@@ -55,8 +56,12 @@ const tui: TuiPlugin = async (api, options, meta) => {
     },
   })
 
+  // Rainbow post-processor: colors "ultrasploit" text everywhere on screen
+  const postProcess = createUltrasploitPostProcess()
+  api.renderer.addPostProcessFn(postProcess)
+
   api.lifecycle.onDispose(() => {
-    // cleanup if needed
+    api.renderer.removePostProcessFn(postProcess)
   })
 }
 
