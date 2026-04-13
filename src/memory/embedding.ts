@@ -17,7 +17,9 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
 import { VECTOR_DIMENSIONS } from "./schema"
+import { createLog } from "../util/log"
 
+const log = createLog("memory.embedding")
 /** Embedding result with both dense and sparse vectors */
 export interface EmbeddingResult {
   /** Dense embedding vector (1024 dimensions for BGE-M3) */
@@ -116,7 +118,7 @@ export class EmbeddingService {
         sparse: response.sparse?.[0] || {},
       }
     } catch (error) {
-      console.error("Embedding failed:", error)
+      log.error("Embedding failed", { error })
       this.serverAvailable = false
       return null
     }
@@ -168,7 +170,7 @@ export class EmbeddingService {
         sparse: response.sparse?.[i] || {},
       }))
     } catch (error) {
-      console.error("Batch embedding failed:", error)
+      log.error("Batch embedding failed", { error })
       return texts.map(() => null)
     }
   }
@@ -197,7 +199,7 @@ export class EmbeddingService {
       try {
         await this.client.close()
       } catch (error) {
-        console.error("Error closing MCP client:", error)
+        log.error("Error closing MCP client", { error })
       }
       this.client = null
     }
@@ -206,13 +208,13 @@ export class EmbeddingService {
       try {
         await this.transport.close()
       } catch (error) {
-        console.error("Error closing transport:", error)
+        log.error("Error closing transport", { error })
       }
       this.transport = null
     }
 
     this.serverAvailable = false
-    console.log("Embedding server stopped")
+    log.info("Embedding server stopped")
   }
 
   /**
@@ -239,7 +241,7 @@ export class EmbeddingService {
    * Start the embedding MCP server via Docker.
    */
   private async startServer(): Promise<void> {
-    console.log("Starting embedding MCP server (first use)...")
+    log.info("Starting embedding MCP server (first use)")
 
     try {
       // Create stdio transport to Docker container
@@ -276,7 +278,7 @@ export class EmbeddingService {
 
       this.serverAvailable = true
       this.lastHealthCheck = Date.now()
-      console.log("Embedding server ready")
+      log.info("Embedding server ready")
 
     } catch (error) {
       // Clean up on failure
@@ -311,21 +313,21 @@ export class EmbeddingService {
         const errorText = content?.[0]?.type === "text"
           ? content[0].text
           : "Unknown error"
-        console.error(`Tool ${name} error:`, errorText)
+        log.error(`Tool ${name} error`, { errorText })
         return null
       }
 
       // Parse JSON from text content
       const textContent = content?.find((c) => c.type === "text")
       if (!textContent || !textContent.text) {
-        console.error(`Tool ${name} returned no text content`)
+        log.error(`Tool ${name} returned no text content`)
         return null
       }
 
       return JSON.parse(textContent.text) as T
 
     } catch (error) {
-      console.error(`Tool ${name} call failed:`, error)
+      log.error(`Tool ${name} call failed`, { error })
       throw error
     }
   }

@@ -134,12 +134,40 @@ describe("registry schema validation", () => {
     expect(Object.keys(reg.tools)).toHaveLength(2)
   })
 
-  test("RegistrySchema rejects registry without version", () => {
-    expect(() =>
-      RegistrySchema.parse({
-        tools: { nmap: { name: "nmap", description: "Network mapper" } },
-      })
-    ).toThrow()
+  test("RegistrySchema accepts registry without version (lenient for real-world YAML)", () => {
+    const reg = RegistrySchema.parse({
+      tools: { nmap: { name: "nmap", description: "Network mapper" } },
+    })
+    expect(reg.version).toBeUndefined()
+    expect(Object.keys(reg.tools)).toHaveLength(1)
+  })
+
+  test("RegistrySchema accepts null values in param enum arrays", () => {
+    // Real registries have nulls in values arrays (e.g., nmap scan_type)
+    const reg = RegistrySchema.parse({
+      version: "2.0",
+      tools: {
+        nmap: {
+          name: "nmap",
+          description: "Scanner",
+          methods: {
+            port_scan: {
+              description: "Scan ports",
+              params: {
+                scan_type: {
+                  type: "string",
+                  description: "Scan type",
+                  values: ["tcp_connect", "syn", null, "udp"],
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+    const values = reg.tools.nmap.methods?.port_scan?.params?.scan_type?.values
+    expect(values).toContain(null)
+    expect(values).toContain("tcp_connect")
   })
 })
 
@@ -1582,6 +1610,28 @@ describe("searchToolsInMemory integration", () => {
     const result = searchToolsInMemory(registry, "web scraping")
     expect(result.warnings.length).toBeGreaterThan(0)
     expect(result.warnings[0]).toContain("playwright-mcp")
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Real registry YAML validation (integration — uses cached file on disk)
+// ---------------------------------------------------------------------------
+
+describe("real registry YAML validation", () => {
+  const registryPath = join(process.env.HOME || "", ".opensploit", "registry.yaml")
+
+  test("cached registry YAML passes RegistrySchema validation", () => {
+    const { existsSync } = require("fs")
+    const { readFileSync } = require("fs")
+    if (!existsSync(registryPath)) {
+      console.error("  (skipped — no cached registry at " + registryPath + ")")
+      return
+    }
+    const text = readFileSync(registryPath, "utf-8")
+    const parsed = yaml.load(text)
+    // This is the exact code path that was failing — if this passes, registry search works
+    const validated = RegistrySchema.parse(parsed)
+    expect(Object.keys(validated.tools).length).toBeGreaterThan(0)
   })
 })
 

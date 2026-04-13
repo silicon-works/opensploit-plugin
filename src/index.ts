@@ -17,11 +17,9 @@ import { createSavePatternTool } from "./tools/save-pattern.js"
  */
 const OpenSploitPlugin: Plugin = async (ctx, options) => {
   const shell = ctx.$
-  console.error("[opensploit-plugin] Plugin loaded successfully")
 
   return {
     config: async (config: Config) => {
-      console.error("[opensploit-plugin] Config hook called, registering agents")
       // Register pentest agents via config mutation (proven pattern: orchestrator, magic-context, beads)
       const agents = loadAgents()
       config.agent = { ...config.agent, ...agents }

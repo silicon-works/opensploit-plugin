@@ -61,7 +61,7 @@ const ParamDefSchema = z.object({
   default: z.any().optional(),
   description: z.string().optional(),
   enum: z.array(z.union([z.string(), z.number()])).optional(),
-  values: z.array(z.string()).optional(),
+  values: z.array(z.string().nullable()).optional(),
 })
 
 const ReturnDefSchema = z.object({
@@ -122,10 +122,10 @@ const RegistryToolSchema = z.object({
 }).passthrough() // Allow extra fields like see_also, warnings, internal
 
 const RegistrySchema = z.object({
-  version: z.string(),
+  version: z.string().optional(),
   updated_at: z.string().optional(),
-  tools: z.record(z.string(), RegistryToolSchema),
-})
+  tools: z.record(z.string(), RegistryToolSchema.passthrough()),
+}).passthrough()
 
 // =============================================================================
 // Registry Types (inferred from Zod schemas)
