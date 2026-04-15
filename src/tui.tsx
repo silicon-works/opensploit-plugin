@@ -66,8 +66,17 @@ const tui: TuiPlugin = async (api, options, meta) => {
     },
   })
 
-  // Rainbow post-processor: colors "ultrasploit" text everywhere on screen
-  const postProcess = createUltrasploitPostProcess()
+  // Override terminal title from "OpenCode" to "OpenSploit"
+  // Set initially + on every render (OpenCode resets it on session changes)
+  api.renderer.setTerminalTitle("OpenSploit")
+
+  // Rainbow post-processor: colors "ultrasploit" text + maintains terminal title
+  const rainbowPostProcess = createUltrasploitPostProcess()
+  const postProcess = (buffer: any, delta: number) => {
+    rainbowPostProcess(buffer, delta)
+    // Re-assert title — OpenCode's app.tsx resets to "OpenCode" on session changes
+    api.renderer.setTerminalTitle("OpenSploit")
+  }
   api.renderer.addPostProcessFn(postProcess)
 
   api.lifecycle.onDispose(() => {
