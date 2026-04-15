@@ -3,6 +3,7 @@ import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 import { createSignal } from "solid-js"
 import { toggleUltrasploit, isUltrasploitEnabled } from "./hooks/ultrasploit"
 import { createUltrasploitPostProcess } from "./tui-rainbow"
+import { OpenSploitLogo } from "./tui-logo"
 
 const tui: TuiPlugin = async (api, options, meta) => {
   // Restore state from kv on load
@@ -41,10 +42,19 @@ const tui: TuiPlugin = async (api, options, meta) => {
     },
   ])
 
-  // Sidebar footer: show ultrasploit indicator when active
+  // Replace OpenCode logo with OpenSploit logo
   api.slots.register({
     order: 0,
     slots: {
+      home_logo() {
+        return (
+          <OpenSploitLogo
+            textMuted={api.theme.current.textMuted}
+            text={api.theme.current.text}
+            background={api.theme.current.background}
+          />
+        )
+      },
       sidebar_footer() {
         if (!ultrasploitActive()) return null
         return (
