@@ -692,28 +692,27 @@ describe("ADVERSARIAL: Path Rewriting Attacks", () => {
   // ---------------------------------------------------------------------------
 
   describe("path traversal", () => {
-    test("BUG 9: /session/../../../etc/passwd escapes session directory", () => {
+    test("FIXED: /session/../../../etc/passwd blocked by traversal check", () => {
       SessionDirectory.create(ROOT)
       const sessionDir = SessionDirectory.get(ROOT)
 
       const output = { args: { filePath: "/session/../../../etc/passwd" } }
       toolBeforeHook({ tool: "read", sessionID: ROOT, callID: "c1" }, output)
 
-      // path.join(sessionDir, "../../../etc/passwd") resolves the ".." segments
-      // This should NOT escape the session directory, but it DOES
-      const resolved = output.args.filePath
-      expect(resolved).not.toContain(sessionDir) // BUG: escapes session dir
-      expect(resolved).toBe("/etc/passwd") // Resolves to system file
+      // Should stay inside session directory — traversal blocked
+      expect(output.args.filePath).toContain(sessionDir)
+      expect(output.args.filePath).toContain("BLOCKED_PATH_TRAVERSAL")
     })
 
-    test("BUG 9: /session/findings/../../../../../../tmp/evil escapes", () => {
+    test("FIXED: /session/findings/../../../../../../tmp/evil blocked", () => {
       SessionDirectory.create(ROOT)
+      const sessionDir = SessionDirectory.get(ROOT)
 
       const output = { args: { filePath: "/session/findings/../../../../../../tmp/evil" } }
       toolBeforeHook({ tool: "write", sessionID: ROOT, callID: "c1" }, output)
 
-      // Many levels of ".." should escape to root
-      expect(output.args.filePath).not.toContain("opensploit-session")
+      expect(output.args.filePath).toContain(sessionDir)
+      expect(output.args.filePath).toContain("BLOCKED_PATH_TRAVERSAL")
     })
 
     test("BUG 9: bash command with /session/../../../etc/shadow", async () => {
@@ -1788,16 +1787,14 @@ describe("ADVERSARIAL: Session Directory Security", () => {
     // Should not throw
   })
 
-  test("translateSessionPath with /session/.. escapes to parent", () => {
+  test("FIXED: translateSessionPath with /session/.. blocked by traversal check", () => {
     SessionDirectory.create(ROOT)
     const sessionDir = SessionDirectory.get(ROOT)
 
     const result = SessionDirectory.translateSessionPath("/session/../secret.txt", ROOT)
-    // path.join(sessionDir, "../secret.txt") resolves ".."
-    // This escapes the session directory!
-    const { join, dirname } = require("path")
-    const expected = join(dirname(sessionDir), "secret.txt")
-    expect(result).toBe(expected) // BUG 9: escapes session dir
+    // Should stay inside session dir — traversal blocked
+    expect(result).toContain(sessionDir)
+    expect(result).toContain("BLOCKED_PATH_TRAVERSAL")
   })
 
   test("translateSessionPath with non-/session/ path returns unchanged", () => {

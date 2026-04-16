@@ -193,7 +193,16 @@ export function translateSessionPath(filepath: string, sessionID: string): strin
       create(rootSessionID)
     }
 
-    return join(sessionDir, relativePath)
+    const resolved = join(sessionDir, relativePath)
+
+    // BUG-SH-6 fix: ensure resolved path stays inside session directory.
+    // path.join resolves ".." segments, so /session/../../etc/passwd would
+    // escape to /etc/passwd. Reject any path that doesn't start with sessionDir.
+    if (!resolved.startsWith(sessionDir)) {
+      return join(sessionDir, "BLOCKED_PATH_TRAVERSAL")
+    }
+
+    return resolved
   }
   return filepath
 }
