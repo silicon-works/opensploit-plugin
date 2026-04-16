@@ -67,6 +67,12 @@ export namespace TargetValidation {
    * Extract target from various input formats (URL, IP, hostname)
    */
   export function extractTarget(input: string): { ip?: string; hostname?: string } {
+    // BUG-SH-3 fix: URL-decode bare encoded strings (e.g., %31%30%2e%31%30%2e%31%30%2e%31)
+    let decoded = input
+    try {
+      if (input.includes("%")) decoded = decodeURIComponent(input)
+    } catch { /* not URL-encoded, continue with original */ }
+
     // Try to parse as URL
     try {
       const url = new URL(input)
@@ -85,7 +91,7 @@ export namespace TargetValidation {
 
     // BUG-SH-4 fix: strip port suffix (e.g., 10.10.10.1:8080 → 10.10.10.1)
     // BUG-SH-2 fix: strip CIDR suffix (e.g., 10.0.0.0/8 → 10.0.0.0)
-    const withoutPort = input.replace(/:\d+$/, "").replace(/\/\d{1,3}$/, "")
+    const withoutPort = decoded.replace(/:\d+$/, "").replace(/\/\d{1,3}$/, "")
 
     // Check if it's an IP address
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(withoutPort)) {
@@ -93,7 +99,7 @@ export namespace TargetValidation {
     }
 
     // Treat as hostname (also strip port from hostnames like target.htb:80)
-    return { hostname: withoutPort || input }
+    return { hostname: withoutPort || decoded }
   }
 
   /**

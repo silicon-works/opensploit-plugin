@@ -232,12 +232,9 @@ describe("ADVERSARIAL: Target Validation Bypass", () => {
       expect(info.ip).toBeDefined()
     })
 
-    test("bare URL-encoded IP is treated as hostname", () => {
-      // Without http:// prefix, this won't be parsed as URL
+    test("FIXED: bare URL-encoded IP decoded and classified correctly", () => {
       const extracted = TargetValidation.extractTarget("%31%30%2e%31%30%2e%31%30%2e%31")
-      // Not a URL, not matching IP regex — treated as hostname
-      expect(extracted.hostname).toBe("%31%30%2e%31%30%2e%31%30%2e%31")
-      expect(extracted.ip).toBeUndefined()
+      expect(extracted.ip).toBe("10.10.10.1")
     })
 
     test("double-encoded URL retains encoding in hostname", () => {
