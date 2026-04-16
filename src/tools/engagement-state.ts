@@ -208,15 +208,46 @@ async function ensureFindingsDir(sessionID: string): Promise<string> {
 // State Management
 // -----------------------------------------------------------------------------
 
+/**
+ * Per-session mutex to prevent lost-update race conditions.
+ * When two sub-agents update state concurrently, without this mutex
+ * the second write silently overwrites the first (BUG-ES-1).
+ */
+const sessionLocks = new Map<string, Promise<void>>()
+
+export async function withSessionLock<T>(sessionID: string, fn: () => Promise<T>): Promise<T> {
+  // Wait for any existing operation on this session to complete
+  const existing = sessionLocks.get(sessionID)
+  let resolve: () => void
+  const lock = new Promise<void>((r) => { resolve = r })
+  sessionLocks.set(sessionID, lock)
+
+  if (existing) await existing
+
+  try {
+    return await fn()
+  } finally {
+    resolve!()
+    if (sessionLocks.get(sessionID) === lock) {
+      sessionLocks.delete(sessionID)
+    }
+  }
+}
+
 export async function loadEngagementState(sessionID: string): Promise<EngagementState> {
   try {
     const statePath = getStatePath(sessionID)
     const content = await fs.readFile(statePath, "utf-8")
-    const parsed = yaml.load(content) as EngagementState
-    return parsed ?? {}
+    const parsed = yaml.load(content)
+    // BUG-ES-2 fix: validate parsed is a plain object, not string/number/array
+    if (parsed === null || parsed === undefined) return {}
+    if (typeof parsed !== "object" || Array.isArray(parsed)) {
+      log.error("Corrupt state.yaml — expected object, got " + typeof parsed, { sessionID: sessionID.slice(-8) })
+      return {}
+    }
+    return parsed as EngagementState
   } catch (error: any) {
     if (error.code === "ENOENT") {
-      // File doesn't exist yet - return empty state
       return {}
     }
     log.error("Failed to load engagement state", { error: error.message })
@@ -592,6 +623,10 @@ export function createUpdateEngagementStateTool() {
       // Use root session ID so all agents in the tree share the same state
       const sessionID = getRootSession(ctx.sessionID)
 
+      // BUG-ES-1 fix: wrap load-merge-save in per-session lock to prevent
+      // concurrent sub-agents from overwriting each other's changes
+      return withSessionLock(sessionID, async () => {
+
       log.info("update_engagement_state called", {
         sessionID: sessionID.slice(-8),
         callerSessionID: ctx.sessionID.slice(-8),
@@ -672,6 +707,8 @@ export function createUpdateEngagementStateTool() {
         `- Access Level: ${newState.accessLevel ?? "none"}`,
         `- Flags: ${newState.flags?.length ?? 0} captured`,
       ].join("\n")
+
+      }) // end withSessionLock
     },
   })
 }
