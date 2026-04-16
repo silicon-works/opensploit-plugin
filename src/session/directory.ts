@@ -186,6 +186,10 @@ export function readFinding(sessionID: string, phase: string): string | null {
  * @returns Translated path (or original if not a /session/ path)
  */
 export function translateSessionPath(filepath: string, sessionID: string): string {
+  // Reject null bytes which can truncate paths at the OS level
+  if (filepath.includes("\0")) {
+    return filepath // Return as-is — file operations will fail safely on null bytes
+  }
   if (filepath.startsWith("/session/")) {
     const relativePath = filepath.slice(9) // "/session/".length = 9
     // Use root session ID so sub-agents share the same directory as root
