@@ -384,7 +384,12 @@ export namespace ContainerManager {
       }
     }
     // Pass environment variables to container
+    // Validate env keys (reject keys with = or control characters that would malform Docker flags)
     for (const [key, value] of Object.entries(mergedEnv)) {
+      if (!key || key.includes("=") || /[\x00-\x1f]/.test(key)) {
+        log.warn("skipping invalid env key", { toolName, key })
+        continue
+      }
       dockerArgs.push("-e", `${key}=${value}`)
     }
     // Mount session directory for wordlists, artifacts, etc.
