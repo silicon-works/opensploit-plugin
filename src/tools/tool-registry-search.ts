@@ -589,6 +589,7 @@ function calculateNeverUseForPenalty(query: string, tool: RegistryTool): number 
   const neverUseFor = tool.routing?.never_use_for || []
 
   for (const pattern of neverUseFor) {
+    if (pattern == null) continue
     const task = typeof pattern === "string" ? pattern : pattern.task
     if (task && queryLower.includes(task.toLowerCase())) {
       penalty -= 15
@@ -603,6 +604,7 @@ function checkAntiPatterns(query: string, tool: RegistryTool): string | undefine
   const queryLower = query.toLowerCase()
 
   for (const pattern of neverUseFor) {
+    if (pattern == null) continue
     if (typeof pattern === "string") {
       if (queryLower.includes(pattern.toLowerCase())) {
         return `${tool.name} should not be used for "${pattern}"`
@@ -618,12 +620,14 @@ function checkAntiPatterns(query: string, tool: RegistryTool): string | undefine
 }
 
 function normalizeNeverUseFor(entries: Array<string | NeverUseForEntry>): NeverUseForEntry[] {
-  return entries.map((entry) => {
-    if (typeof entry === "string") {
-      return { task: entry, use_instead: "" }
-    }
-    return entry
-  })
+  return entries
+    .filter((entry) => entry != null)
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return { task: entry, use_instead: "" }
+      }
+      return entry
+    })
 }
 
 function extractSuggestedAlternatives(tool: RegistryTool): string[] {
@@ -634,6 +638,7 @@ function extractSuggestedAlternatives(tool: RegistryTool): string[] {
   }
 
   for (const entry of tool.routing?.never_use_for || []) {
+    if (entry == null) continue
     if (typeof entry !== "string" && entry.use_instead) {
       const useInstead = Array.isArray(entry.use_instead) ? entry.use_instead : [entry.use_instead]
       for (const alt of useInstead) {
@@ -756,6 +761,11 @@ async function searchToolsLance(
   capability?: string,
   limit: number = 5
 ): Promise<SearchToolsResult> {
+  // Empty/whitespace query should return no results
+  if (!query || !query.trim()) {
+    return { results: [], warnings: [], scoredResults: [] }
+  }
+
   const warnings: string[] = []
 
   try {
@@ -959,9 +969,11 @@ function scoreAndGroupMethods(
       let seeAlso: string[] = []
       try {
         if (row.see_also_json) {
-          seeAlso = JSON.parse(row.see_also_json as string)
+          const parsed = JSON.parse(row.see_also_json as string)
+          seeAlso = Array.isArray(parsed) ? parsed : []
         } else if ((tool as any).see_also) {
-          seeAlso = (tool as any).see_also
+          const raw = (tool as any).see_also
+          seeAlso = Array.isArray(raw) ? raw : []
         }
       } catch { /* ignore */ }
 
@@ -1039,6 +1051,11 @@ function searchToolsInMemory(
   capability?: string,
   limit: number = 5
 ): SearchToolsResult {
+  // Empty/whitespace query should return no results
+  if (!query || !query.trim()) {
+    return { results: [], warnings: [], scoredResults: [] }
+  }
+
   const scoredTools: LocalScoredTool[] = []
   const warnings: string[] = []
 

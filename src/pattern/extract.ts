@@ -233,7 +233,7 @@ export function deriveVulnType(name: string): string {
  * Map severity string to CVSS-like score for ranking
  */
 export function severityToScore(severity?: string): number {
-  switch (severity) {
+  switch (severity?.toLowerCase()) {
     case "critical":
       return 9.5
     case "high":

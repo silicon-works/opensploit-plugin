@@ -788,9 +788,9 @@ describe("Normalizer edge cases", () => {
     const records = normalizeNmap(data)
     expect(records.length).toBe(2)
 
-    // Port is stored as string "80" — not number 80
-    expect(typeof records[0].port).toBe("string") // BUG: should be number
-    expect(records[0].port).toBe("80") // Stored as-is from input
+    // FIXED (BUG-OS-6): Port is coerced to number
+    expect(typeof records[0].port).toBe("number")
+    expect(records[0].port).toBe(80)
   })
 
   test("ffuf results with null entries in array", () => {

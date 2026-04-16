@@ -1093,21 +1093,17 @@ describe("ATTACK: in-memory keyword scoring quirks", () => {
   })
 
   /**
-   * HYPOTHESIS: An empty query string produces no words and no full-string
-   * match. The `searchText.includes("")` check returns TRUE for all tools
-   * because every string includes "". So ALL tools get +5 score.
+   * BUG-RS-7 FIX: Empty query now returns empty results immediately
+   * instead of matching all tools via includes('').
    */
-  test("empty query matches all tools via includes('')", () => {
+  test("empty query returns empty results", () => {
     const registry = makeRegistry({
       nmap: { name: "nmap", description: "Network scanner" },
       ffuf: { name: "ffuf", description: "Web fuzzer" },
     })
 
     const result = searchToolsInMemory(registry, "", undefined, undefined, 5)
-    // "".split(/\s+/).filter(w => w.length > 1) = [] — no words
-    // searchText.includes("") = TRUE for all strings!
-    // So every tool gets +5 from the full-string match
-    expect(result.results.length).toBe(2) // ALL tools match
+    expect(result.results.length).toBe(0)
   })
 
   /**
@@ -1248,20 +1244,16 @@ describe("ATTACK: tool ID resolution in scoreAndGroupMethods", () => {
     )
 
     expect(results.length).toBe(1)
-    // JSON.parse('"just-a-string"') = "just-a-string" (a string)
-    // seeAlso is assigned this string, not an array
-    // This would break later when iterating: `for (const toolRef of seeAlso)`
-    // Actually... iterating over a string gives individual characters
-    // which are then used as tool references — totally wrong
-    expect(results[0].seeAlso).toBe("just-a-string" as any)
+    // BUG-RS-4 FIX: non-array JSON now defaults to []
+    expect(Array.isArray(results[0].seeAlso)).toBe(true)
+    expect(results[0].seeAlso).toEqual([])
   })
 
   /**
-   * HYPOTHESIS: If see_also_json is a JSON object (not array), it gets
-   * assigned as seeAlso. Later code does `seeAlso.length > 0` and iterates.
-   * An object's `.length` is undefined, so the check fails and it's skipped.
+   * BUG-RS-4 FIX: If see_also_json is a JSON object (not array), it now
+   * defaults to [] instead of being assigned as-is.
    */
-  test("see_also_json with JSON object", () => {
+  test("see_also_json with JSON object defaults to empty array", () => {
     const registry = makeRegistry({
       nmap: { name: "nmap", description: "Network scanner" },
     })
@@ -1282,11 +1274,9 @@ describe("ATTACK: tool ID resolution in scoreAndGroupMethods", () => {
     )
 
     expect(results.length).toBe(1)
-    // JSON.parse('{"tool": "ffuf"}') = {tool: "ffuf"}
-    // seeAlso is an object, not an array
-    // Object.length is undefined, so `seeAlso.length > 0` is false
-    // It won't crash but seeAlso is silently wrong
-    expect(Array.isArray(results[0].seeAlso)).toBe(false) // BUG: not an array
+    // BUG-RS-4 FIX: non-array JSON now defaults to []
+    expect(Array.isArray(results[0].seeAlso)).toBe(true)
+    expect(results[0].seeAlso).toEqual([])
   })
 })
 
@@ -1704,18 +1694,16 @@ describe("ATTACK: normalizeNeverUseFor edge cases", () => {
    * or undefined entries in the array.
    */
   /**
-   * BUG CONFIRMED: normalizeNeverUseFor doesn't throw on null entries.
-   * Instead, null passes through the `typeof entry === "string"` check
-   * (false), so it falls to the else branch which returns the raw null.
-   * The result array contains null, which would crash later if iterated
-   * and accessed (.task on null).
+   * BUG-RS-5 FIX: normalizeNeverUseFor now filters out null/undefined entries
+   * instead of passing them through.
    */
-  test("BUG: null entry in never_use_for array passes through as null", () => {
+  test("null entry in never_use_for array is filtered out", () => {
     const entries: any[] = ["scan", null, { task: "port", use_instead: "nmap" }]
     const result = normalizeNeverUseFor(entries)
-    // null is NOT caught — it passes through as-is
-    expect(result[1]).toBeNull()
-    // This will crash downstream if code tries to access result[1].task
+    // null is now filtered out
+    expect(result).toHaveLength(2)
+    expect(result[0]).toEqual({ task: "scan", use_instead: "" })
+    expect(result[1]).toEqual({ task: "port", use_instead: "nmap" })
   })
 
   /**
@@ -1786,23 +1774,23 @@ describe("ATTACK: output normalizer edge cases", () => {
   })
 
   /**
-   * HYPOTHESIS: The plural-to-singular conversion (strip trailing 's') is
-   * naive. "status" becomes "statu", "process" becomes "proces".
+   * BUG-RS-8 FIX: Plural stripping now has exceptions for words ending in
+   * 'ss', 'us', 'is' (e.g., "status", "address", "analysis").
    */
-  test("naive plural stripping produces wrong type names", () => {
+  test("plural stripping preserves words ending in ss/us/is", () => {
     const data = {
       status: [{ code: 200 }],
     }
     const records = normalizeGeneric(data)
-    expect(records[0].type).toBe("statu") // BUG: "status" → "statu" (not "status")
+    expect(records[0].type).toBe("status") // FIXED: "status" preserved
   })
 
-  test("process array type becomes 'proces'", () => {
+  test("process array type preserved", () => {
     const data = {
       process: [{ pid: 1234 }],
     }
     const records = normalizeGeneric(data)
-    expect(records[0].type).toBe("proces") // BUG: "process" → "proces"
+    expect(records[0].type).toBe("process") // FIXED: "process" preserved (ends in 'ss')
   })
 
   /**

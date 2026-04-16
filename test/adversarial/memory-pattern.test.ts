@@ -1601,11 +1601,11 @@ describe("ADVERSARIAL: pattern extraction", () => {
       expect(severityToScore(null as any)).toBe(0)
     })
 
-    test("BUG HUNT: case sensitivity - uppercase not handled", () => {
-      // There's no .toLowerCase() in severityToScore
-      expect(severityToScore("Critical")).toBe(0)
-      expect(severityToScore("HIGH")).toBe(0)
-      // This is a bug: callers might pass mixed-case severity strings
+    test("case sensitivity - mixed case handled via toLowerCase", () => {
+      expect(severityToScore("Critical")).toBe(9.5)
+      expect(severityToScore("HIGH")).toBe(7.5)
+      expect(severityToScore("Medium")).toBe(5.0)
+      expect(severityToScore("LOW")).toBe(2.5)
     })
   })
 

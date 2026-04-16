@@ -56,6 +56,23 @@ const messageCache = new Map<string, CachedMessageInfo>()
  */
 const writtenParts = new Map<string, string>() // partID -> status written (for tools)
 
+/** Maximum entries before evicting oldest from messageCache / writtenParts */
+const CACHE_MAX = 1000
+
+/**
+ * Evict the oldest entries from a Map when it exceeds CACHE_MAX.
+ * Deletes the first (oldest-inserted) entries via the Map iterator.
+ */
+function evictOldest<K, V>(map: Map<K, V>): void {
+  if (map.size <= CACHE_MAX) return
+  const excess = map.size - CACHE_MAX
+  const iter = map.keys()
+  for (let i = 0; i < excess; i++) {
+    const { value } = iter.next()
+    map.delete(value)
+  }
+}
+
 /**
  * Set of sessions for which we've written session.json.
  */
@@ -172,6 +189,7 @@ function handleMessageUpdated(event: any): void {
     cost,
     timeCreated: msg.time?.created ?? Date.now(),
   })
+  evictOldest(messageCache)
 
   // Update session.json with model info on first assistant message
   const rootID = getRootSession(sessionID)
@@ -214,6 +232,7 @@ function handlePartUpdated(event: any): void {
     const prevStatus = writtenParts.get(partID)
     if (prevStatus === "completed" || prevStatus === "error") return
     writtenParts.set(partID, status)
+    evictOldest(writtenParts)
   } else {
     // For text and tvar parts, only write once (first non-empty version)
     if (writtenParts.has(partID)) return
@@ -226,6 +245,7 @@ function handlePartUpdated(event: any): void {
     if (partType === "text" && (part.synthetic || part.ignored)) return
 
     writtenParts.set(partID, partType)
+    evictOldest(writtenParts)
   }
 
   // Look up cached message info

@@ -303,13 +303,13 @@ export function normalizeGeneric(data: any, rawOutput?: string): OutputRecord[] 
         const item = value[i]
         if (typeof item === "object" && item !== null) {
           records.push({
-            type: key.replace(/s$/, ""), // "results" -> "result"
+            type: key.replace(/(?<![sui])s$/, ""), // "results" -> "result", but keep "status", "address", "analysis"
             _index: i,
             ...item,
           })
         } else {
           records.push({
-            type: key.replace(/s$/, ""),
+            type: key.replace(/(?<![sui])s$/, ""),
             _index: i,
             value: item,
           })
