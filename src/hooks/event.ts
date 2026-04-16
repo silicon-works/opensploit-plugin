@@ -68,8 +68,9 @@ function evictOldest<K, V>(map: Map<K, V>): void {
   const excess = map.size - CACHE_MAX
   const iter = map.keys()
   for (let i = 0; i < excess; i++) {
-    const { value } = iter.next()
-    map.delete(value)
+    const { value, done } = iter.next()
+    if (done) break
+    map.delete(value as K)
   }
 }
 
