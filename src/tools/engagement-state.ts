@@ -437,19 +437,20 @@ export function mergeState(existing: EngagementState, updates: Partial<Engagemen
 
       // For certain arrays, deduplicate by key fields
       if (key === "ports") {
-        // Dedupe by port+protocol
+        // Dedupe by port+protocol (default missing protocol to "tcp")
         const merged = [...existingArray]
         for (const item of value) {
           // Skip entries with NaN/invalid port (NaN !== NaN breaks dedup)
           if (typeof item.port !== "number" || Number.isNaN(item.port)) continue
+          const itemProto = item.protocol || "tcp"
           const exists = merged.some(
-            (p: any) => p.port === item.port && p.protocol === item.protocol
+            (p: any) => p.port === item.port && (p.protocol || "tcp") === itemProto
           )
           if (!exists) merged.push(item)
           else {
             // Update existing entry
             const idx = merged.findIndex(
-              (p: any) => p.port === item.port && p.protocol === item.protocol
+              (p: any) => p.port === item.port && (p.protocol || "tcp") === itemProto
             )
             if (idx !== -1) merged[idx] = { ...merged[idx], ...item }
           }

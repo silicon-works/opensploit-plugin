@@ -567,7 +567,7 @@ describe("ATTACK: port dedup with protocol=undefined", () => {
    * so undefined === undefined is true. But what if existing has protocol="tcp"
    * (from schema default) and update has protocol=undefined?
    */
-  test("port with explicit protocol and port without protocol are NOT deduped", () => {
+  test("port with explicit protocol and port without protocol ARE deduped (BUG-ES-4 FIXED)", () => {
     // Schema default is "tcp", so if you pass { port: 22 } the schema adds protocol: "tcp"
     // But mergeState takes pre-parsed objects, not schema-validated ones
     const existing: EngagementState = {
@@ -579,10 +579,9 @@ describe("ATTACK: port dedup with protocol=undefined", () => {
     }
     const result = mergeState(existing, updates)
 
-    // existing.protocol="tcp", update.protocol=undefined
-    // "tcp" === undefined is false, so they won't dedup
-    // BUG: same port 22 appears twice because protocol mismatch
-    expect(result.ports?.length).toBe(2) // Should be 1, but is 2
+    // FIXED: missing protocol defaults to "tcp", so dedup works
+    expect(result.ports?.length).toBe(1)
+    expect(result.ports?.[0]?.service).toBe("ssh-updated")
   })
 
   test("two ports with undefined protocol ARE deduped", () => {
