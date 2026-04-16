@@ -11,19 +11,15 @@
  * BUGS FOUND (confirmed by tests):
  * =========================================================================
  *
- * BUG 1 [HIGH] Path traversal in outputId — no sanitization (CONFIRMED)
- *   - query({ outputId: "../secret" }) reads files outside outputs/ directory
- *   - getMetadata, getRawOutput also vulnerable via same vector
- *   - The code does: path.join(sessionDir, `${outputId}.json`)
- *   - If outputId = "../secret", it resolves to the parent (session) directory
- *   - Impact: Information disclosure from arbitrary .json files on disk
- *   - Test: "BUG 1: outputId with path traversal" — reads planted secret.json
+ * BUG 1 [HIGH] Path traversal in outputId — FIXED by sanitizeId()
+ *   - query({ outputId: "../secret" }) now throws "Invalid outputId"
+ *   - sanitizeId() rejects IDs containing "..", "/", "\", or null bytes
+ *   - Test: "BUG 1 FIXED: outputId with path traversal" — expects rejection
  *
- * BUG 1b [HIGH] Path traversal in sessionId — writes outside sessions dir (CONFIRMED)
- *   - sessionId = "../../tmp/evil" causes store to write to ~/tmp/evil/outputs/
- *   - No validation on sessionId parameter at all
- *   - Impact: Arbitrary directory creation + file writes outside sessions/
- *   - Test: "SessionId with path separators" — file created at escaped path
+ * BUG 1b [HIGH] Path traversal in sessionId — FIXED by sanitizeId()
+ *   - sessionId = "../../tmp/evil" now throws "Invalid sessionID"
+ *   - Empty sessionId also rejected (!id check)
+ *   - Test: "SessionId with path separators" — expects rejection
  *
  * BUG 3 [MEDIUM] shouldStore crashes on circular data objects (CONFIRMED)
  *   - JSON.stringify(circularObj) throws "cannot serialize cyclic structures"
@@ -339,68 +335,31 @@ describe("Threshold edge cases", () => {
 // ============================================================================
 
 describe("Storage corruption and path traversal", () => {
-  test("BUG 1: outputId with path traversal (../../) — reads outside session dir", async () => {
-    // HYPOTHESIS: query() does path.join(sessionDir, `${outputId}.json`)
-    // If outputId = "../../etc/passwd", it resolves outside the outputs dir.
-    // This is a path traversal vulnerability.
+  test("BUG 1 FIXED: outputId with path traversal (../../) — rejected by sanitizeId", async () => {
+    // sanitizeId() now rejects outputIds containing ".." or "/"
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    // Plant a file at a known location that path traversal would reach
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const victimDir = join(sessionsDir, sid)
-    mkdirSync(join(victimDir, "outputs"), { recursive: true })
-
-    // Plant a decoy file one level above outputs/
-    const decoyPath = join(victimDir, "secret.json")
-    writeFileSync(
-      decoyPath,
-      JSON.stringify({
-        id: "stolen",
-        tool: "secret",
-        method: "x",
-        timestamp: Date.now(),
-        records: [{ type: "secret", data: "STOLEN_DATA" }],
-        summary: { total: 1, byType: { secret: 1 } },
-        rawOutput: "secret raw",
-        sizeBytes: 100,
+    await expect(
+      query({
+        sessionId: sid,
+        outputId: "../secret",
+        query: undefined,
       }),
-      "utf-8",
-    )
-
-    // Try to read with path traversal: outputs/ + "../secret" = session dir
-    const result = await query({
-      sessionId: sid,
-      outputId: "../secret",
-      query: undefined,
-    })
-
-    // BUG: If result.found is true, path traversal succeeded
-    // A secure implementation would validate outputId format
-    if (result.found) {
-      console.error("BUG 1 CONFIRMED: Path traversal in outputId — read file outside outputs/")
-      expect(result.records[0]?.type).toBe("secret")
-    }
-
-    // Clean up
-    if (existsSync(decoyPath)) unlinkSync(decoyPath)
-
-    // This documents the vulnerability regardless
-    // The test passes either way — check console output for BUG confirmation
+    ).rejects.toThrow("Invalid")
   })
 
-  test("outputId with null bytes — potential path truncation", async () => {
+  test("outputId with null bytes — rejected by sanitizeId", async () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    // Null bytes in filenames can cause path truncation on some systems
-    const result = await query({
-      sessionId: sid,
-      outputId: "out_abc\x00../../etc/passwd",
-    })
-
-    // Should not find anything and should not crash
-    expect(result.found).toBe(false)
+    // sanitizeId() rejects IDs containing null bytes
+    await expect(
+      query({
+        sessionId: sid,
+        outputId: "out_abc\x00../../etc/passwd",
+      }),
+    ).rejects.toThrow("Invalid")
   })
 
   test("Corrupted JSON in stored file — query returns graceful error", async () => {
@@ -1080,68 +1039,30 @@ describe("Session isolation", () => {
     // This is "by design" since it's a local tool, but worth documenting
   })
 
-  test("Empty sessionId — creates directory with empty name", async () => {
-    // HYPOTHESIS: No validation on sessionId. Empty string creates a weird path.
-    const result = await store({
-      sessionId: "",
-      tool: "test",
-      data: null,
-      rawOutput: strOfLen(6000),
-    })
-
-    // This actually works — creates ~/.opensploit/sessions//outputs/
-    // path.join handles empty string component
-    if (result.stored) {
-      expect(result.outputId).toBeDefined()
-
-      // Query should work too
-      const q = await query({
+  test("Empty sessionId — rejected by sanitizeId", async () => {
+    // sanitizeId() rejects empty/falsy IDs
+    await expect(
+      store({
         sessionId: "",
-        outputId: result.outputId!,
-      })
-      expect(q.found).toBe(true)
-
-      // Clean up
-      cleanupTestSession("")
-    }
+        tool: "test",
+        data: null,
+        rawOutput: strOfLen(6000),
+      }),
+    ).rejects.toThrow("Invalid")
   })
 
-  test("SessionId with path separators — writes outside sessions directory", async () => {
-    // HYPOTHESIS: If sessionId = "../../tmp/evil", the outputs dir becomes
-    // ~/.opensploit/sessions/../../tmp/evil/outputs/ = ~/tmp/evil/outputs/
-    // which escapes the sessions directory entirely.
+  test("SessionId with path separators — rejected by sanitizeId", async () => {
+    // sanitizeId() rejects IDs containing ".." or "/"
     const evilSessionId = "../../tmp/opensploit-evil-test-" + randomBytes(4).toString("hex")
-    const home = process.env.HOME ?? "/tmp"
 
-    const result = await store({
-      sessionId: evilSessionId,
-      tool: "test",
-      data: null,
-      rawOutput: strOfLen(6000),
-    })
-
-    expect(result.stored).toBe(true)
-
-    // Check that the file was created OUTSIDE ~/.opensploit/sessions/
-    // path.join resolves ../../ so it ends up at ~/tmp/opensploit-evil-test-xxx/outputs/
-    const escapedDir = join(home, "tmp", evilSessionId.replace("../../tmp/", ""), "outputs")
-    const fileCreatedOutsideSessions = existsSync(escapedDir)
-
-    // BUG CONFIRMED: file created outside the sessions directory
-    expect(fileCreatedOutsideSessions).toBe(true)
-
-    // Verify query also works via the same traversal path
-    const q = await query({
-      sessionId: evilSessionId,
-      outputId: result.outputId!,
-    })
-    expect(q.found).toBe(true)
-
-    // Clean up the escaped directory
-    const escapedParent = join(home, "tmp", evilSessionId.replace("../../tmp/", ""))
-    if (existsSync(escapedParent)) {
-      rmSync(escapedParent, { recursive: true, force: true })
-    }
+    await expect(
+      store({
+        sessionId: evilSessionId,
+        tool: "test",
+        data: null,
+        rawOutput: strOfLen(6000),
+      }),
+    ).rejects.toThrow("Invalid")
   })
 })
 

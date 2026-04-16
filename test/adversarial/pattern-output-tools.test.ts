@@ -11,14 +11,12 @@
  * BUGS FOUND (confirmed by tests):
  * =========================================================================
  *
- * BUG 1 [HIGH] Path traversal in read-tool-output via outputId (CONFIRMED)
- *   - executeReadToolOutput({ id: "../secret" }) reads files outside outputs/ dir
- *   - The code does: path.join(sessionDir, `${outputId}.json`) with no sanitization
- *   - If outputId = "../secret", it reads {sessionDir}/secret.json (parent directory)
- *   - Impact: Information disclosure from arbitrary .json files relative to outputs/
- *   - Already documented in output-store.test.ts BUG 1, but also affects tool layer
- *   - Test: "18. outputId with path traversal" — reads planted secret.json
- *   - File: src/tools/output-store.ts (query function, line 320)
+ * BUG 1 [HIGH] Path traversal in read-tool-output via outputId — FIXED by sanitizeId()
+ *   - executeReadToolOutput({ id: "../secret" }) now throws "Invalid outputId"
+ *   - sanitizeId() rejects IDs containing "..", "/", "\", or null bytes
+ *   - Also documented in output-store.test.ts BUG 1
+ *   - Test: "18. outputId with path traversal" — expects rejection
+ *   - File: src/tools/output-store.ts (sanitizeId function)
  *
  * BUG 2 [HIGH] pattern-search has no try/catch — backend errors crash the tool (CONFIRMED)
  *   - If searchPatterns() throws (not returns error), the error propagates unhandled
@@ -903,63 +901,35 @@ describe("ADVERSARIAL: read-tool-output", () => {
   // 18. outputId with path traversal
   // ---------------------------------------------------------------------------
 
-  test("18. outputId with path traversal — reads outside outputs directory", async () => {
-    // HYPOTHESIS: outputId is used directly in path.join(sessionDir, `${outputId}.json`).
-    // If outputId = "../secret", it resolves to session dir instead of outputs dir.
-    // This was already documented in output-store.test.ts BUG 1.
-    // Testing the read-tool-output tool layer specifically.
+  test("18. outputId with path traversal — rejected by sanitizeId", async () => {
+    // sanitizeId() now rejects outputIds containing ".." or "/"
+    // The error propagates through executeReadToolOutput since there's no try/catch
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    // Plant a secret file one level up from outputs/
-    const sessionDir = join(SESSIONS_DIR, sid)
-    mkdirSync(join(sessionDir, "outputs"), { recursive: true })
-    const secretData: StoredOutput = {
-      id: "secret",
-      tool: "secret-tool",
-      method: "steal",
-      timestamp: Date.now(),
-      records: [{ type: "credential", login: "admin", password: "hunter2" }],
-      summary: { total: 1, byType: { credential: 1 } },
-      rawOutput: "secret data",
-      sizeBytes: 100,
-    }
-    writeFileSync(join(sessionDir, "secret.json"), JSON.stringify(secretData), "utf-8")
-
-    // Try to traverse
-    const result = await executeReadToolOutput(
-      { id: "../secret", limit: 50 },
-      sid,
-    )
-
-    // BUG CONFIRMED: Path traversal reads the secret file
-    // If result.output contains "secret-tool" or "credential", traversal worked
-    if (result.output.includes("secret-tool") || result.output.includes("credential")) {
-      // BUG: Path traversal in read-tool-output via outputId
-      expect(result.output).toContain("secret-tool")
-    } else {
-      // If it says "not found", the traversal was blocked somehow
-      expect(result.output).toContain("not found")
-    }
+    await expect(
+      executeReadToolOutput(
+        { id: "../secret", limit: 50 },
+        sid,
+      ),
+    ).rejects.toThrow("Invalid")
   })
 
   // ---------------------------------------------------------------------------
   // 19. Empty outputId
   // ---------------------------------------------------------------------------
 
-  test("19. empty string outputId — not found (no crash)", async () => {
-    // HYPOTHESIS: path.join(dir, ".json") creates a file named ".json"
-    // which won't exist. Should return not-found.
+  test("19. empty string outputId — rejected by sanitizeId", async () => {
+    // sanitizeId() rejects empty/falsy IDs
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    const result = await executeReadToolOutput(
-      { id: "", limit: 50 },
-      sid,
-    )
-
-    expect(result.title).toContain("not found")
-    expect(result.output).toContain("not found")
+    await expect(
+      executeReadToolOutput(
+        { id: "", limit: 50 },
+        sid,
+      ),
+    ).rejects.toThrow("Invalid")
   })
 
   // ---------------------------------------------------------------------------

@@ -47,11 +47,22 @@ const RETENTION_MS = 24 * 60 * 60 * 1000 // 24 hours
 const SESSIONS_DIR = path.join(os.homedir(), ".opensploit", "sessions")
 
 /**
+ * Sanitize an ID to prevent path traversal (BUG-OS-1, BUG-OS-2).
+ * Rejects IDs containing "..", "/", "\", or null bytes.
+ */
+function sanitizeId(id: string, label: string): string {
+  if (!id || id.includes("..") || id.includes("/") || id.includes("\\") || id.includes("\0")) {
+    throw new Error(`Invalid ${label}: must not contain path separators or traversal sequences`)
+  }
+  return id
+}
+
+/**
  * Get outputs directory for a session.
  * ~/.opensploit/sessions/{sessionID}/outputs/
  */
 function getSessionOutputsDir(sessionID: string): string {
-  return path.join(SESSIONS_DIR, sessionID, "outputs")
+  return path.join(SESSIONS_DIR, sanitizeId(sessionID, "sessionID"), "outputs")
 }
 
 /**
@@ -316,8 +327,12 @@ export async function query(input: {
 }> {
   const { sessionId, outputId, query: queryStr, type, limit = QUERY_LIMIT_DEFAULT } = input
 
+  // BUG-OS-1/OS-2 fix: sanitize IDs to prevent path traversal
+  const safeSessionId = sanitizeId(sessionId, "sessionId")
+  const safeOutputId = sanitizeId(outputId, "outputId")
+
   // Load stored output
-  const outputPath = path.join(getSessionDir(sessionId), `${outputId}.json`)
+  const outputPath = path.join(getSessionDir(safeSessionId), `${safeOutputId}.json`)
 
   if (!existsSync(outputPath)) {
     return {
@@ -404,7 +419,8 @@ export async function getMetadata(
   recordCount?: number
   sizeBytes?: number
 }> {
-  const outputPath = path.join(getSessionDir(sessionId), `${outputId}.json`)
+  const safeOutputId = sanitizeId(outputId, "outputId")
+  const outputPath = path.join(getSessionDir(sessionId), `${safeOutputId}.json`)
 
   if (!existsSync(outputPath)) {
     return { found: false }
@@ -430,7 +446,8 @@ export async function getMetadata(
  * Get raw output from stored output (for fallback text search).
  */
 export async function getRawOutput(sessionId: string, outputId: string): Promise<string | null> {
-  const outputPath = path.join(getSessionDir(sessionId), `${outputId}.json`)
+  const safeOutputId = sanitizeId(outputId, "outputId")
+  const outputPath = path.join(getSessionDir(sessionId), `${safeOutputId}.json`)
 
   if (!existsSync(outputPath)) {
     return null
