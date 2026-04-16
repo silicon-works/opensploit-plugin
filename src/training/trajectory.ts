@@ -113,7 +113,21 @@ export function appendEntry(rootSessionID: string, entry: TrajectoryEntry): void
   try {
     const dir = ensureSessionDir(rootSessionID)
     const filePath = path.join(dir, "trajectory.jsonl")
-    appendFileSync(filePath, JSON.stringify(entry) + "\n", "utf-8")
+    let serialized: string
+    try {
+      serialized = JSON.stringify(entry)
+    } catch {
+      // Handle circular references
+      const seen = new WeakSet()
+      serialized = JSON.stringify(entry, (_key, value) => {
+        if (typeof value === "object" && value !== null) {
+          if (seen.has(value)) return "[Circular]"
+          seen.add(value)
+        }
+        return value
+      })
+    }
+    appendFileSync(filePath, serialized + "\n", "utf-8")
   } catch (error) {
     log.error("append failed", {
       sessionID: rootSessionID.slice(-8),

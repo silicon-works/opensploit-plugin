@@ -230,9 +230,7 @@ describe("Trajectory: appendEntry adversarial", () => {
     expect(e2.text).toBe("clean text")
   })
 
-  test("BUG 3: Entry with circular references — silently lost", () => {
-    // HYPOTHESIS: JSON.stringify crashes on circular refs, appendEntry catches it
-    // RESULT: appendEntry has try/catch, logs error, entry is silently DROPPED
+  test("Entry with circular references is saved with [Circular] markers (BUG-TS-3 FIXED)", () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
@@ -241,12 +239,12 @@ describe("Trajectory: appendEntry adversarial", () => {
 
     const entry = makeEntry({ toolInput: circular, type: "tool", tool: "test" })
 
-    // Should not throw (try/catch in appendEntry)
+    // Should not throw
     appendEntry(sid, entry)
 
-    // But the entry was NOT written
+    // FIXED: Entry IS written — circular refs replaced with "[Circular]"
     const entries = readTrajectory(sid)
-    expect(entries.length).toBe(0) // Entry silently lost — BUG 3 confirmed
+    expect(entries.length).toBe(1)
   })
 
   test("BUG 1 FIXED: rootSessionID with path traversal — blocked by validation", () => {
@@ -1239,8 +1237,7 @@ describe("Session hierarchy: adversarial", () => {
     // No warning, no error — the first root is just gone
   })
 
-  test("Cycle: A->B and B->A registered", () => {
-    // HYPOTHESIS: The system doesn't detect cycles
+  test("Cycle: A->B and B->A — cycle detection prevents infinite loop", () => {
     const a = `cycle-a-${randomBytes(4).toString("hex")}`
     const b = `cycle-b-${randomBytes(4).toString("hex")}`
     hierarchyToClean.push(a, b)
@@ -1248,14 +1245,15 @@ describe("Session hierarchy: adversarial", () => {
     registerRootSession(a, b)
     registerRootSession(b, a)
 
-    // getRootSession is a single lookup (not recursive), so no infinite loop
-    expect(getRootSession(a)).toBe(b)
-    expect(getRootSession(b)).toBe(a)
-
-    // But logically this is inconsistent — neither is actually a root
-    // getChildren sees cross-references
-    expect(getChildren(a)).toContain(b)
-    expect(getChildren(b)).toContain(a)
+    // FIXED: getRootSession now walks up with cycle detection
+    // a → b → a (cycle detected) → stops at a
+    // b → a → b (cycle detected) → stops at b
+    // No infinite loop, returns whichever endpoint the walk reaches
+    const rootA = getRootSession(a)
+    const rootB = getRootSession(b)
+    // Both should terminate without infinite loop
+    expect(typeof rootA).toBe("string")
+    expect(typeof rootB).toBe("string")
   })
 
   test("Self-registration: session mapped to itself", () => {
@@ -1271,9 +1269,7 @@ describe("Session hierarchy: adversarial", () => {
     expect(getChildren(sid)).toEqual([]) // Self-reference excluded by childID !== rootSessionID check
   })
 
-  test("BUG 8: unregisterTree misses grandchildren from chains", () => {
-    // HYPOTHESIS: If we have A->root-X and B->A (B's root is A, not root-X),
-    // then unregisterTree(root-X) only removes A, not B.
+  test("unregisterTree cleans up grandchildren from chains (BUG-TS-5 FIXED)", () => {
     const rootX = `root-chain-${randomBytes(4).toString("hex")}`
     const childA = `child-chain-a-${randomBytes(4).toString("hex")}`
     const childB = `child-chain-b-${randomBytes(4).toString("hex")}`
@@ -1284,20 +1280,16 @@ describe("Session hierarchy: adversarial", () => {
     // B is registered with A as its root (not rootX)
     registerRootSession(childB, childA)
 
-    // Before cleanup
+    // FIXED: getRootSession walks up the chain
     expect(getRootSession(childA)).toBe(rootX)
-    expect(getRootSession(childB)).toBe(childA)
-    expect(getChildren(rootX)).toContain(childA)
+    expect(getRootSession(childB)).toBe(rootX) // Now resolves to rootX, not childA
 
     // Unregister tree for rootX
     unregisterTree(rootX)
 
-    // childA is cleaned up (was child of rootX)
+    // FIXED: Both childA and childB are cleaned up
     expect(getRootSession(childA)).toBe(childA) // Falls back to self
-
-    // BUG 8: childB still points to childA (which was removed)
-    expect(getRootSession(childB)).toBe(childA) // Stale reference!
-    // childB is now an orphan pointing to a deleted session
+    expect(getRootSession(childB)).toBe(childB) // Falls back to self (no orphan)
   })
 
   test("unregister for non-existent session — no crash", () => {

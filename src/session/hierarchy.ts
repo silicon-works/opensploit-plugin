@@ -35,7 +35,14 @@ export function registerRootSession(sessionID: string, rootSessionID: string): v
  * Returns the sessionID itself if it's a root session (no parent registered).
  */
 export function getRootSession(sessionID: string): string {
-  return rootSessionMap.get(sessionID) ?? sessionID
+  let current = sessionID
+  const visited = new Set<string>()
+  while (rootSessionMap.has(current) && rootSessionMap.get(current) !== current) {
+    if (visited.has(current)) break // Prevent infinite loops
+    visited.add(current)
+    current = rootSessionMap.get(current)!
+  }
+  return current
 }
 
 /**
@@ -73,10 +80,16 @@ export function getChildren(rootSessionID: string): string[] {
  * Called when root session is deleted to clean up the entire tree.
  */
 export function unregisterTree(rootSessionID: string): void {
-  const children = getChildren(rootSessionID)
-  for (const childID of children) {
+  // Find ALL sessions whose root resolves to this rootSessionID
+  const toDelete: string[] = []
+  for (const [childID] of rootSessionMap.entries()) {
+    if (getRootSession(childID) === rootSessionID) {
+      toDelete.push(childID)
+    }
+  }
+  for (const childID of toDelete) {
     rootSessionMap.delete(childID)
   }
   rootSessionMap.delete(rootSessionID)
-  log.info("unregistered_tree", { rootSessionID: rootSessionID.slice(-8), childCount: children.length })
+  log.info("unregistered_tree", { rootSessionID: rootSessionID.slice(-8), childCount: toDelete.length })
 }
