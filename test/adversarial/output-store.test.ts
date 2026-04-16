@@ -300,33 +300,24 @@ describe("Threshold edge cases", () => {
     expect(result.stored).toBe(false)
   })
 
-  test("BUG 3: Circular data object — JSON.stringify throws in shouldStore", async () => {
-    // HYPOTHESIS: shouldStore calls JSON.stringify(data) without try/catch.
-    // A circular reference will throw TypeError.
+  test("Circular data object is handled gracefully (BUG-OS-3 FIXED)", async () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
     const circular: any = { a: 1 }
     circular.self = circular
 
-    // This SHOULD NOT throw — it should handle gracefully
-    // BUG: It DOES throw TypeError: Converting circular structure to JSON
-    let threw = false
-    try {
-      await store({
-        sessionId: sid,
-        tool: "test",
-        data: circular,
-        rawOutput: strOfLen(6000),
-      })
-    } catch (e: any) {
-      threw = true
-      expect(e.message).toContain("cyclic")
-    }
+    // FIXED: safeStringify handles circular references without throwing
+    const result = await store({
+      sessionId: sid,
+      tool: "test",
+      data: circular,
+      rawOutput: strOfLen(6000),
+    })
 
-    // If this assertion fires, the bug exists — store() crashed
-    // A robust implementation would catch the stringify error
-    expect(threw).toBe(true) // BUG CONFIRMED: crashes on circular data
+    // Should succeed — circular ref replaced with "[Circular]"
+    expect(result).toBeDefined()
+    expect(result.outputId).toBeTruthy()
   })
 })
 

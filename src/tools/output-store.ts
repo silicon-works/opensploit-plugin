@@ -27,6 +27,23 @@ import { normalize, type OutputRecord } from "../util/output-normalizers"
 
 const log = createLog("output-store")
 
+/** Safe JSON.stringify that handles circular references */
+function safeStringify(data: any, indent?: number): string {
+  try {
+    return JSON.stringify(data, null, indent)
+  } catch {
+    // Circular or non-serializable — use a replacer that tracks seen objects
+    const seen = new WeakSet()
+    return JSON.stringify(data, (_key, value) => {
+      if (typeof value === "object" && value !== null) {
+        if (seen.has(value)) return "[Circular]"
+        seen.add(value)
+      }
+      return value
+    }, indent)
+  }
+}
+
 /**
  * Generate a unique output ID.
  * Format: out_{timestamp}_{random}
@@ -102,7 +119,7 @@ export interface StoreResult {
  * Check if output should be stored externally.
  */
 function shouldStore(data: any, rawOutput: string): boolean {
-  const dataSize = data ? JSON.stringify(data).length : 0
+  const dataSize = data ? safeStringify(data).length : 0
   const rawSize = rawOutput?.length ?? 0
   return dataSize + rawSize > STORE_THRESHOLD
 }
@@ -229,7 +246,7 @@ function formatDirectOutput(data: any, rawOutput: string): string {
       return lines.join("\n")
     }
     // Otherwise return JSON
-    return JSON.stringify(data, null, 2)
+    return safeStringify(data, 2)
   }
   return rawOutput
 }
@@ -279,7 +296,7 @@ export async function store(input: {
     records,
     summary,
     rawOutput,
-    sizeBytes: (data ? JSON.stringify(data).length : 0) + (rawOutput?.length ?? 0),
+    sizeBytes: (data ? safeStringify(data).length : 0) + (rawOutput?.length ?? 0),
   }
 
   // Ensure session directory exists
@@ -290,7 +307,7 @@ export async function store(input: {
 
   // Write to file
   const outputPath = path.join(sessionDir, `${outputId}.json`)
-  writeFileSync(outputPath, JSON.stringify(storedOutput, null, 2), "utf-8")
+  writeFileSync(outputPath, safeStringify(storedOutput, 2), "utf-8")
 
   log.info("stored", {
     sessionId: sessionId.slice(-8),
@@ -589,7 +606,7 @@ export function formatQueryResults(
   } else {
     // Generic format - JSON list
     for (const r of records) {
-      lines.push(`- ${JSON.stringify(r)}`)
+      lines.push(`- ${safeStringify(r)}`)
     }
   }
 
