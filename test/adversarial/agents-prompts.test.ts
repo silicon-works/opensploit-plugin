@@ -466,31 +466,16 @@ describe("ultrasploit chat-message hook", () => {
   // advances lastIndex. If .some() calls .test() on multiple parts, the
   // lastIndex from part[0]'s .test() persists to part[1]'s .test(),
   // potentially causing missed matches on alternating calls.
-  test("20b. BUG: regex /g flag + .test() causes lastIndex statefulness", async () => {
-    // This test exposes the stateful regex bug.
-    // Call the hook twice in succession with single-part messages.
-    // The /g regex's lastIndex persists between .test() calls within
-    // the same regex object (module-level const).
-
-    // First call — matches "ultrasploit" at index 0, lastIndex advances to 11
+  test("20b. FIXED: regex lastIndex reset + disable detection (BUG-SH-9/SH-12)", async () => {
+    // First call — activates ultrasploit
     const msg1 = makeMessage("ultrasploit go")
     await chatMessageHook(msg1.input, msg1.output)
     expect(isUltrasploitEnabled()).toBe(true)
 
-    // Reset for clean second test
-    setUltrasploit(false)
-
-    // Second call — the KEYWORD_REGEX.lastIndex may still be 11 from previous .test()
-    // .test() on "ultrasploit stop" starts at lastIndex=11, finds nothing, returns false
-    // Then .test() resets lastIndex to 0 (standard behavior when no match)
-    // So the THIRD call would work again. This is intermittent!
+    // Second call — "stop" triggers disable detection (BUG-SH-12 fix)
     const msg2 = makeMessage("ultrasploit stop")
     await chatMessageHook(msg2.input, msg2.output)
-
-    // If this fails, it proves the /g lastIndex bug:
-    // The second consecutive call's .test() starts from a non-zero lastIndex
-    expect(isUltrasploitEnabled()).toBe(true)
-    expect(msg2.output.parts[0].text).not.toContain("ultrasploit")
+    expect(isUltrasploitEnabled()).toBe(false) // Disabled by "stop" keyword
   })
 
   // More thorough test: three consecutive calls to definitively catch the alternation

@@ -323,10 +323,7 @@ describe("ADVERSARIAL: pattern-search", () => {
     expect(query.limit).toBe(0)
   })
 
-  test("4b. limit=-5 — forwarded to backend, no validation", async () => {
-    // HYPOTHESIS: Negative limit is not rejected by zod schema (no .positive()).
-    // It will be forwarded to searchPatterns which calls LanceDB .limit(-5).
-    // LanceDB behavior with negative limit is undefined.
+  test("4b. limit=-5 — clamped to 0 (BUG-PT-4 FIXED)", async () => {
     mockSearchPatterns.mockResolvedValue([COLD_START])
     mockFormatPatternResults.mockReturnValue("formatted")
 
@@ -337,8 +334,8 @@ describe("ADVERSARIAL: pattern-search", () => {
     )
 
     const query = mockSearchPatterns.mock.calls[0][0] as PatternQuery
-    // BUG CANDIDATE: No min validation on limit, negative passes through
-    expect(query.limit).toBe(-5)
+    // FIXED: negative limit clamped to 0
+    expect(query.limit).toBe(0)
   })
 
   test("4c. limit=10000 — forwarded to backend, no cap", async () => {
@@ -450,20 +447,14 @@ describe("ADVERSARIAL: pattern-search", () => {
 
     const { ctx } = makeContext()
 
-    let error: any
-    try {
-      await patternSearchTool.execute(
-        { target_profile: { services: ["http"] }, objective: "initial_access" },
-        ctx,
-      )
-    } catch (e) {
-      error = e
-    }
+    // FIXED (BUG-PT-1): execute() now has try/catch, returns error string
+    const result = await patternSearchTool.execute(
+      { target_profile: { services: ["http"] }, objective: "initial_access" },
+      ctx,
+    )
 
-    // BUG: No error handling in pattern-search.ts execute()
-    // searchPatterns itself has try/catch that returns COLD_START on error,
-    // but if the mock throws (simulating a truly unexpected error), it propagates
-    expect(error?.message).toBe("LanceDB connection failed")
+    expect(result).toContain("Pattern search error")
+    expect(result).toContain("LanceDB connection failed")
   })
 
   // ---------------------------------------------------------------------------
@@ -695,24 +686,16 @@ describe("ADVERSARIAL: save-pattern", () => {
   // 14. capturePattern throws an error
   // ---------------------------------------------------------------------------
 
-  test("14. capturePattern throws — no try/catch in save-pattern, error propagates", async () => {
-    // HYPOTHESIS: save-pattern.ts has no try/catch around capturePattern().
-    // A thrown error propagates to the plugin framework.
+  test("14. capturePattern throws — error handled gracefully (BUG-PT-2 FIXED)", async () => {
     mockCapturePattern.mockRejectedValue(new Error("Database write failed"))
 
     const { ctx } = makeContext()
 
-    let error: any
-    try {
-      await savePatternTool.execute({}, ctx)
-    } catch (e) {
-      error = e
-    }
+    // FIXED: save-pattern now has try/catch, returns error string
+    const result = await savePatternTool.execute({}, ctx)
 
-    // BUG: No error handling in save-pattern.ts execute()
-    // capturePattern() itself has try/catch internally (returns CaptureResult with success:false),
-    // but if something truly unexpected happens (like the mock rejecting), it propagates.
-    expect(error?.message).toBe("Database write failed")
+    expect(result).toContain("Pattern save error")
+    expect(result).toContain("Database write failed")
   })
 
   // ---------------------------------------------------------------------------
@@ -1370,31 +1353,22 @@ describe("ADVERSARIAL: cross-cutting concerns", () => {
   // 26/27. metadata() handling in all paths
   // ---------------------------------------------------------------------------
 
-  test("pattern-search: metadata is called even when formatPatternResults crashes", async () => {
-    // HYPOTHESIS: If formatPatternResults throws, metadata is never called.
-    // The tool has no try/catch, so the error propagates before metadata().
+  test("pattern-search: formatPatternResults crash handled gracefully (BUG-PT-1 FIXED)", async () => {
     mockSearchPatterns.mockResolvedValue([COLD_START])
     mockFormatPatternResults.mockImplementation(() => {
       throw new Error("format crash")
     })
 
-    const { ctx, metadataCalls } = makeContext()
+    const { ctx } = makeContext()
 
-    let error: any
-    try {
-      await patternSearchTool.execute(
-        { target_profile: { services: ["http"] }, objective: "initial_access" },
-        ctx,
-      )
-    } catch (e) {
-      error = e
-    }
+    // FIXED: try/catch catches the format error and returns error string
+    const result = await patternSearchTool.execute(
+      { target_profile: { services: ["http"] }, objective: "initial_access" },
+      ctx,
+    )
 
-    // BUG: metadata() is called AFTER formatPatternResults, so if format crashes,
-    // metadata is never emitted. The tool result line in the UI will have no metadata.
-    expect(error?.message).toBe("format crash")
-    // metadata was NOT called because the crash happens before ctx.metadata()
-    expect(metadataCalls).toHaveLength(0)
+    expect(result).toContain("Pattern search error")
+    expect(result).toContain("format crash")
   })
 
   test("save-pattern: metadata is always called (after capturePattern)", async () => {
@@ -1408,9 +1382,7 @@ describe("ADVERSARIAL: cross-cutting concerns", () => {
     expect(metadataCalls).toHaveLength(1)
   })
 
-  test("pattern-search: ctx with no metadata function — crashes", async () => {
-    // HYPOTHESIS: If ctx.metadata is undefined (malformed context),
-    // the call to ctx.metadata({...}) throws TypeError.
+  test("pattern-search: ctx with no metadata function — handled gracefully (BUG-PT-1 FIXED)", async () => {
     mockSearchPatterns.mockResolvedValue([COLD_START])
     mockFormatPatternResults.mockReturnValue("formatted")
 
@@ -1424,18 +1396,13 @@ describe("ADVERSARIAL: cross-cutting concerns", () => {
       // metadata intentionally missing
     }
 
-    let error: any
-    try {
-      await patternSearchTool.execute(
-        { target_profile: { services: ["http"] }, objective: "initial_access" },
-        ctx,
-      )
-    } catch (e) {
-      error = e
-    }
+    // FIXED: try/catch catches the TypeError from missing ctx.metadata
+    const result = await patternSearchTool.execute(
+      { target_profile: { services: ["http"] }, objective: "initial_access" },
+      ctx,
+    )
 
-    // ctx.metadata is undefined → ctx.metadata({...}) throws TypeError
-    expect(error).toBeInstanceOf(TypeError)
+    expect(result).toContain("Pattern search error")
   })
 
   // ---------------------------------------------------------------------------
