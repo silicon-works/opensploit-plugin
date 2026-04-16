@@ -38,8 +38,20 @@ export async function chatMessageHook(
 
     if (!hasKeyword) return
 
-    // Enable ultrasploit mode if not already enabled
-    if (!isUltrasploitEnabled()) {
+    // Check if user wants to disable (e.g. "disable ultrasploit", "stop ultrasploit")
+    const fullText = output.parts
+      .filter((p: any) => p.type === "text")
+      .map((p: any) => p.text)
+      .join(" ")
+      .toLowerCase()
+    const isDisable = /\b(disable|stop|off|deactivate|no)\b/.test(fullText)
+
+    if (isDisable) {
+      if (isUltrasploitEnabled()) {
+        setUltrasploit(false)
+        log.info("ultrasploit mode deactivated", { sessionID: input.sessionID })
+      }
+    } else if (!isUltrasploitEnabled()) {
       setUltrasploit(true)
       log.info("ultrasploit mode activated", { sessionID: input.sessionID })
     }

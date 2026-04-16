@@ -1044,10 +1044,8 @@ describe("ADVERSARIAL: Ultrasploit Activation", () => {
   // ---------------------------------------------------------------------------
 
   describe("disable mechanism", () => {
-    test("BUG 12: no message-based way to disable ultrasploit", async () => {
-      setUltrasploit(true)
-
-      // Try various disable phrases
+    test("disable phrases deactivate ultrasploit (BUG-SH-12 FIXED)", async () => {
+      // Try various disable phrases — each should turn it off
       for (const phrase of [
         "disable ultrasploit",
         "stop ultrasploit",
@@ -1055,15 +1053,15 @@ describe("ADVERSARIAL: Ultrasploit Activation", () => {
         "ultrasploit off",
         "deactivate ultrasploit",
       ]) {
+        setUltrasploit(true)
         const output = {
           message: {},
           parts: [{ type: "text", text: phrase }],
         }
         await chatMessageHook(baseInput, output)
 
-        // Each of these contains "ultrasploit" so they trigger detection
-        // But there's no disable logic — it stays enabled
-        expect(isUltrasploitEnabled()).toBe(true)
+        // FIXED: disable keywords are detected and ultrasploit is turned off
+        expect(isUltrasploitEnabled()).toBe(false)
       }
     })
 
