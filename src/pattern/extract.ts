@@ -187,6 +187,9 @@ export function deriveVulnType(name: string): string {
   // SQL Injection variants
   if (normalized.includes("sql injection") || normalized.includes("sqli") || normalized.includes("blind sql")) return "sqli"
 
+  // Deserialization (check before RCE — "deserialization rce" is more specific)
+  if (normalized.includes("deseriali")) return "deserialization"
+
   // Remote Code Execution
   if (
     normalized.includes("rce") ||
@@ -216,9 +219,6 @@ export function deriveVulnType(name: string): string {
   if (normalized.includes("auth bypass") || normalized.includes("authentication bypass")) return "auth_bypass"
   if (normalized.includes("default cred") || normalized.includes("weak password") || normalized.includes("weak cred"))
     return "weak_auth"
-
-  // Deserialization
-  if (normalized.includes("deseriali")) return "deserialization"
 
   // File upload
   if (normalized.includes("file upload") || normalized.includes("unrestricted upload")) return "file_upload"

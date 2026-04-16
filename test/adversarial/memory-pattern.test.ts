@@ -1545,13 +1545,12 @@ describe("ADVERSARIAL: pattern extraction", () => {
       expect(deriveVulnType("Server-Side Template Injection")).toBe("ssti")
     })
 
-    test("BUG 3: 'Java Deserialization RCE' matches 'rce' before 'deserialization'", () => {
-      // The normalized string "java deserialization rce" contains "rce"
-      // The rce check (includes("rce")) comes before the deserialization check
-      // So it's classified as "rce" instead of "deserialization"
-      expect(deriveVulnType("Java Deserialization RCE")).toBe("rce") // Confirms the bug
-      // Without "RCE" in the name, it works correctly:
+    test("'Java Deserialization RCE' classified as deserialization (BUG-MP-3 FIXED)", () => {
+      // FIXED: deserialization check now runs before rce check
+      expect(deriveVulnType("Java Deserialization RCE")).toBe("deserialization")
       expect(deriveVulnType("Java Deserialization")).toBe("deserialization")
+      // Pure RCE still works
+      expect(deriveVulnType("Remote Code Execution")).toBe("rce")
     })
 
     test("unknown vulnerability name returns 'unknown'", () => {
