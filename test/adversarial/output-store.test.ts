@@ -640,9 +640,8 @@ describe("Query injection and edge cases", () => {
     })
 
     expect(result.found).toBe(true)
-    // BUG: slice(0, -1) = first 2 records (drops last one)
-    // This is clearly not the intended behavior for a "limit" parameter
-    expect(result.records.length).toBe(2) // BUG: should be 0 or 3, not 2
+    // FIXED (BUG-OS-4): negative limit clamped to 0 → returns empty
+    expect(result.records.length).toBe(0)
     expect(result.total).toBe(3)
   })
 

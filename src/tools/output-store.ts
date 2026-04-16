@@ -403,8 +403,8 @@ export async function query(input: {
 
     const total = records.length
 
-    // Apply limit
-    records = records.slice(0, limit)
+    // Apply limit (clamp to non-negative to prevent slice(0, -N) dropping records)
+    records = records.slice(0, Math.max(0, limit))
 
     return {
       found: true,
