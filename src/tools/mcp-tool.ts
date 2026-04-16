@@ -194,7 +194,12 @@ export function createMcpTool() {
       let args: Record<string, unknown> = {}
       if (params.arguments) {
         try {
-          args = JSON.parse(params.arguments)
+          const parsed = JSON.parse(params.arguments)
+          // BUG-CM-4 fix: validate parsed value is a plain object, not string/number/array/null
+          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+            return `Invalid arguments: expected a JSON object, got ${Array.isArray(parsed) ? "array" : typeof parsed}.\n\nExpected: {"target": "10.10.10.1", "ports": "1-1000"}`
+          }
+          args = parsed
         } catch (e) {
           return `Invalid JSON in arguments: ${e instanceof Error ? e.message : String(e)}\n\nExpected valid JSON object, e.g.: {"target": "10.10.10.1", "ports": "1-1000"}`
         }
