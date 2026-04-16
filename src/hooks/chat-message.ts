@@ -29,7 +29,11 @@ export async function chatMessageHook(
   try {
     // Check if any text part contains "ultrasploit"
     const hasKeyword = output.parts.some(
-      (p: any) => p.type === "text" && KEYWORD_REGEX.test(p.text),
+      (p: any) => {
+        if (p.type !== "text") return false
+        KEYWORD_REGEX.lastIndex = 0 // Reset stateful /g regex before .test()
+        return KEYWORD_REGEX.test(p.text)
+      },
     )
 
     if (!hasKeyword) return
