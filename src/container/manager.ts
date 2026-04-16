@@ -314,7 +314,7 @@ export namespace ContainerManager {
     })
 
     // Generate container name for service containers (needed for network sharing)
-    const containerName = isService ? `opensploit-${serviceName || toolName}-${Date.now()}` : undefined
+    const containerName = isService ? `opensploit-${serviceName || toolName}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}` : undefined
 
     // Build docker run args based on options
     const dockerArgs = ["run", "-i"]
@@ -336,7 +336,7 @@ export namespace ContainerManager {
     }
     // Clock offset via libfaketime (for Kerberos clock skew)
     // Append to existing LD_PRELOAD instead of overwriting
-    if (options?.clockOffset) {
+    if (options?.clockOffset && /^[+-]?\d+[smhd]?$/i.test(options.clockOffset)) {
       const faketimePath = "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"
       const existingPreload = mergedEnv.LD_PRELOAD
       mergedEnv.LD_PRELOAD = existingPreload ? `${existingPreload}:${faketimePath}` : faketimePath

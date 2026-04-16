@@ -51,7 +51,7 @@ export function normalizeNmap(data: any): OutputRecord[] {
         type: "port",
         host: hostIp,
         hostname,
-        port: port?.port ?? port?.portid,
+        port: Number(port?.port ?? port?.portid) || 0,
         protocol: port?.protocol ?? "tcp",
         state: port?.state ?? "unknown",
         service: port?.service?.name ?? port?.service ?? "",
@@ -83,7 +83,7 @@ export function normalizeNmap(data: any): OutputRecord[] {
           records.push({
             type: "vulnerability",
             host: hostIp,
-            port: port?.port,
+            port: Number(port?.port) || 0,
             script: script?.id ?? "",
             output: script?.output ?? "",
           })
@@ -260,7 +260,7 @@ export function normalizeHydra(data: any): OutputRecord[] {
     records.push({
       type: "credential",
       host: result?.host ?? result?.target ?? "",
-      port: result?.port ?? 0,
+      port: Number(result?.port) || 0,
       service: result?.service ?? result?.protocol ?? "",
       login: result?.login ?? result?.username ?? "",
       password: result?.password ?? "",

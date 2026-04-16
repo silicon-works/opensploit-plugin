@@ -26,6 +26,14 @@ const rootSessionMap = new Map<string, string>()
  * Called by Task tool when spawning sub-agents.
  */
 export function registerRootSession(sessionID: string, rootSessionID: string): void {
+  const existing = rootSessionMap.get(sessionID)
+  if (existing && existing !== rootSessionID) {
+    log.warn("overwriting root session registration", {
+      sessionID: sessionID.slice(-8),
+      oldRoot: existing.slice(-8),
+      newRoot: rootSessionID.slice(-8),
+    })
+  }
   rootSessionMap.set(sessionID, rootSessionID)
   log.info("registered", { sessionID: sessionID.slice(-8), rootSessionID: rootSessionID.slice(-8) })
 }
