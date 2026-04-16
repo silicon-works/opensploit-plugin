@@ -71,22 +71,28 @@ export namespace TargetValidation {
     try {
       const url = new URL(input)
       const hostname = url.hostname
-      // Check if hostname is an IP
-      if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
-        return { ip: hostname }
+      // Only use URL parsing if it produced a real hostname
+      // (e.g., "target.htb:80" parses as URL with empty hostname — fall through)
+      if (hostname) {
+        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
+          return { ip: hostname }
+        }
+        return { hostname }
       }
-      return { hostname }
     } catch {
       // Not a URL, try as bare IP or hostname
     }
 
+    // BUG-SH-4 fix: strip port suffix (e.g., 10.10.10.1:8080 → 10.10.10.1)
+    const withoutPort = input.replace(/:\d+$/, "")
+
     // Check if it's an IP address
-    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(input)) {
-      return { ip: input }
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(withoutPort)) {
+      return { ip: withoutPort }
     }
 
-    // Treat as hostname
-    return { hostname: input }
+    // Treat as hostname (also strip port from hostnames like target.htb:80)
+    return { hostname: withoutPort || input }
   }
 
   /**

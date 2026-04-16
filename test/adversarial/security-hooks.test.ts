@@ -258,19 +258,16 @@ describe("ADVERSARIAL: Target Validation Bypass", () => {
   // ---------------------------------------------------------------------------
 
   describe("IP:port format", () => {
-    test("BUG 4: bare IP:port is not parsed as IP", () => {
+    test("FIXED: bare IP:port correctly parsed as IP", () => {
       const extracted = TargetValidation.extractTarget("10.10.10.1:8080")
-      // "10.10.10.1:8080" doesn't match IP regex
-      // Not a valid URL without scheme
-      // Treated as hostname
-      expect(extracted.hostname).toBe("10.10.10.1:8080")
-      expect(extracted.ip).toBeUndefined()
+      expect(extracted.ip).toBe("10.10.10.1")
+      expect(extracted.hostname).toBeUndefined()
     })
 
-    test("BUG 4: IP:port classified as external despite being private", () => {
+    test("FIXED: IP:port classified as private", () => {
       const info = TargetValidation.classifyTarget("10.10.10.1:8080")
-      expect(info.type).toBe("external") // Bug: should be "private"
-      expect(info.isExternal).toBe(true)
+      expect(info.type).toBe("private")
+      expect(info.isExternal).toBe(false)
     })
 
     test("URL with port correctly extracts IP", () => {
