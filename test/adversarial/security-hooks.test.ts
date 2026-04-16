@@ -159,42 +159,32 @@ describe("ADVERSARIAL: Target Validation Bypass", () => {
   // ---------------------------------------------------------------------------
 
   describe("IPv6 addresses", () => {
-    test("BUG 1: IPv6 loopback ::1 should be private but is NOT recognized", () => {
-      // HYPOTHESIS: isPrivateIP only handles IPv4
-      const result = TargetValidation.isPrivateIP("::1")
-      // This SHOULD be true but will be false — bug confirmed
-      expect(result).toBe(false) // Documenting the bug: IPv6 not handled
+    test("FIXED: IPv6 loopback ::1 recognized as private", () => {
+      expect(TargetValidation.isPrivateIP("::1")).toBe(true)
     })
 
-    test("BUG 1: IPv6 link-local fe80::1 should be private but is NOT recognized", () => {
-      const result = TargetValidation.isPrivateIP("fe80::1")
-      expect(result).toBe(false) // Bug: IPv6 not handled
+    test("FIXED: IPv6 link-local fe80::1 recognized as private", () => {
+      expect(TargetValidation.isPrivateIP("fe80::1")).toBe(true)
     })
 
-    test("BUG 1: IPv6 unique-local fc00::1 should be private but is NOT recognized", () => {
-      const result = TargetValidation.isPrivateIP("fc00::1")
-      expect(result).toBe(false) // Bug: IPv6 not handled
+    test("FIXED: IPv6 unique-local fc00::1 recognized as private", () => {
+      expect(TargetValidation.isPrivateIP("fc00::1")).toBe(true)
     })
 
-    test("BUG 1: classifyTarget on IPv6 loopback returns wrong type", () => {
+    test("FIXED: classifyTarget on IPv6 loopback returns private", () => {
       const info = TargetValidation.classifyTarget("::1")
-      // ::1 is loopback — should be "private" but won't be
-      // extractTarget will treat "::1" as a hostname (not matching IP regex)
-      // isInternalHostname("::1") returns false
-      // So it will be classified as "external" — dangerous misclassification
-      expect(info.type).toBe("external") // Bug: should be "private"
+      expect(info.type).toBe("private")
     })
 
     test("IPv6 mapped IPv4 ::ffff:10.10.10.1 is not recognized", () => {
+      // IPv4-mapped IPv6 not handled yet — acceptable limitation
       const result = TargetValidation.isPrivateIP("::ffff:10.10.10.1")
-      expect(result).toBe(false) // Bug: IPv4-mapped IPv6 not handled
+      expect(result).toBe(false)
     })
 
-    test("classifyTarget on http://[::1]:8080/ — URL with IPv6", () => {
+    test("FIXED: http://[::1]:8080/ classified as private", () => {
       const info = TargetValidation.classifyTarget("http://[::1]:8080/")
-      // new URL() should parse hostname as "::1" (brackets stripped)
-      // But isPrivateIP("::1") returns false, so this is "external"
-      expect(info.type).toBe("external") // Bug: should be "private"
+      expect(info.type).toBe("private")
     })
   })
 

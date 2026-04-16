@@ -11,6 +11,18 @@ export namespace TargetValidation {
    * Private ranges: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8
    */
   export function isPrivateIP(ip: string): boolean {
+    // BUG-SH-1 fix: handle IPv6 private/loopback addresses
+    if (ip.includes(":")) {
+      const normalized = ip.toLowerCase().replace(/^\[|\]$/g, "") // strip brackets
+      // Loopback
+      if (normalized === "::1") return true
+      // Link-local (fe80::/10)
+      if (normalized.startsWith("fe80:") || normalized.startsWith("fe80::")) return true
+      // Unique local (fc00::/7 — fc00:: and fd00::)
+      if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true
+      return false
+    }
+
     // Handle IPv4
     const parts = ip.split(".")
     if (parts.length !== 4) {
@@ -80,8 +92,14 @@ export namespace TargetValidation {
       // Only use URL parsing if it produced a real hostname
       // (e.g., "target.htb:80" parses as URL with empty hostname — fall through)
       if (hostname) {
+        // IPv4
         if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) {
           return { ip: hostname }
+        }
+        // IPv6 (URL parser may return with or without brackets)
+        const bareHostname = hostname.replace(/^\[|\]$/g, "")
+        if (bareHostname.includes(":") && /^[0-9a-fA-F:]+$/.test(bareHostname)) {
+          return { ip: bareHostname }
         }
         return { hostname }
       }
@@ -93,9 +111,16 @@ export namespace TargetValidation {
     // BUG-SH-2 fix: strip CIDR suffix (e.g., 10.0.0.0/8 → 10.0.0.0)
     const withoutPort = decoded.replace(/:\d+$/, "").replace(/\/\d{1,3}$/, "")
 
-    // Check if it's an IP address
+    // Check if it's an IPv4 address
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(withoutPort)) {
       return { ip: withoutPort }
+    }
+
+    // BUG-SH-1 fix: check if it's an IPv6 address (contains ":" and hex chars)
+    // Strip brackets for [::1] format
+    const maybeIPv6 = decoded.replace(/^\[|\]$/g, "")
+    if (maybeIPv6.includes(":") && /^[0-9a-fA-F:]+$/.test(maybeIPv6)) {
+      return { ip: maybeIPv6 }
     }
 
     // Treat as hostname (also strip port from hostnames like target.htb:80)
