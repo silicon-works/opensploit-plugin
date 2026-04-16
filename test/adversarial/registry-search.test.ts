@@ -814,17 +814,16 @@ describe("ATTACK: sparse vector scoring edge cases", () => {
    * HYPOTHESIS: parseSparseJson with nested objects should still work
    * but the values wouldn't be numbers, which would break dotProduct.
    */
-  test("parseSparseJson with nested object values", () => {
+  test("parseSparseJson filters nested object values (BUG-MP-4 FIXED)", () => {
     const result = parseSparseJson('{"1": {"nested": true}, "2": 0.5}')
-    // The function doesn't validate that values are numbers
-    // It returns the raw parsed object
-    expect(typeof result["1"]).not.toBe("number") // Nested object passes through!
+    // FIXED: non-numeric values are filtered out, only 0.5 kept
+    expect(result["1"]).toBeUndefined()
+    expect(result["2"]).toBe(0.5)
 
-    // Now if this is used in sparseDotProduct, object * number = NaN
+    // Dot product is safe — only numeric values present
     const other = { "1": 1.0, "2": 1.0 }
     const dot = sparseDotProduct(result, other)
-    // NaN + 0.5 = NaN
-    expect(Number.isNaN(dot)).toBe(true) // BUG: corrupt sparse data causes NaN
+    expect(dot).toBe(0.5) // Only key "2" overlaps: 0.5 * 1.0 = 0.5
   })
 
   /**

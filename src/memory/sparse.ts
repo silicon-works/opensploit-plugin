@@ -74,7 +74,14 @@ export function parseSparseJson(json: string | null | undefined): SparseVector {
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return {}
     }
-    return parsed as SparseVector
+    // Filter out non-numeric values to prevent NaN in dot product/cosine
+    const result: SparseVector = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "number" && Number.isFinite(value)) {
+        result[key] = value
+      }
+    }
+    return result
   } catch {
     return {}
   }

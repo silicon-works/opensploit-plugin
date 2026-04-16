@@ -281,42 +281,35 @@ describe("ADVERSARIAL: sparse vector math", () => {
   describe("values that are not numbers (type coercion)", () => {
     // HYPOTHESIS: parseSparseJson doesn't validate that values are numbers.
     // If a JSON object has string values, dot product will silently coerce.
-    test("BUG HUNT: parseSparseJson accepts string values as 'numbers'", () => {
+    test("parseSparseJson filters out string values (BUG-MP-4 FIXED)", () => {
       const json = '{"1": "hello", "2": "world"}'
       const parsed = parseSparseJson(json)
-      // parseSparseJson only checks typeof === "object" and not null/array
-      // It does NOT validate that values are numbers
-      expect(parsed).toEqual({ "1": "hello", "2": "world" })
-      // This means downstream dot product will do "hello" * "hello" = NaN
+      // FIXED: non-numeric values are filtered out
+      expect(parsed).toEqual({})
       const dot = sparseDotProduct(parsed, parsed)
-      expect(Number.isNaN(dot)).toBe(true)
+      expect(dot).toBe(0) // Empty vectors → dot product is 0
     })
 
-    test("BUG HUNT: parseSparseJson accepts nested objects as values", () => {
+    test("parseSparseJson filters out nested objects (BUG-MP-4 FIXED)", () => {
       const json = '{"1": {"nested": true}}'
       const parsed = parseSparseJson(json)
-      expect(typeof parsed["1"]).toBe("object")
-      // Multiplying objects: [object Object] * [object Object] = NaN
-      const dot = sparseDotProduct(parsed, parsed)
-      expect(Number.isNaN(dot)).toBe(true)
+      // FIXED: non-numeric values filtered
+      expect(Object.keys(parsed).length).toBe(0)
     })
 
-    test("BUG HUNT: parseSparseJson accepts null values", () => {
+    test("parseSparseJson filters out null values (BUG-MP-4 FIXED)", () => {
       const json = '{"1": null, "2": 1.0}'
       const parsed = parseSparseJson(json)
-      expect(parsed["1"]).toBeNull()
-      // null * null = 0 in JS... but null + 0 = 0, so it actually works?
-      const dot = sparseDotProduct(parsed, parsed)
-      // null * null = 0, 1.0 * 1.0 = 1.0, sum = 1
-      expect(dot).toBe(1)
+      // FIXED: null filtered, 1.0 kept
+      expect(parsed["1"]).toBeUndefined()
+      expect(parsed["2"]).toBe(1.0)
     })
 
-    test("BUG HUNT: parseSparseJson accepts boolean values", () => {
+    test("parseSparseJson filters out boolean values (BUG-MP-4 FIXED)", () => {
       const json = '{"1": true, "2": false}'
       const parsed = parseSparseJson(json)
-      // true * true = 1, false * false = 0
-      const dot = sparseDotProduct(parsed, parsed)
-      expect(dot).toBe(1) // Works due to JS coercion, but semantically wrong
+      // FIXED: booleans filtered out
+      expect(Object.keys(parsed).length).toBe(0)
     })
   })
 
@@ -1951,19 +1944,18 @@ describe("ADVERSARIAL: buildMethodSearchText", () => {
 // =============================================================================
 
 describe("ADVERSARIAL: cross-module interactions", () => {
-  test("BUG: parseSparseJson -> sparseDotProduct with non-numeric values", () => {
+  test("parseSparseJson -> sparseDotProduct filters non-numeric values (BUG-MP-4 FIXED)", () => {
     // This is a confirmed path: data from LanceDB -> parseSparseJson -> scoring
     const malformed = '{"token1": "not_a_number", "token2": [1,2,3]}'
     const parsed = parseSparseJson(malformed)
-    // parseSparseJson accepts it (only checks object shape)
-    expect(Object.keys(parsed).length).toBe(2)
-    // Downstream scoring produces NaN
+    // FIXED: non-numeric values are filtered out
+    expect(Object.keys(parsed).length).toBe(0)
+    // Downstream scoring is safe — empty vectors produce 0
     const query: SparseVector = { "token1": 1.0, "token2": 1.0 }
     const dot = sparseDotProduct(parsed, query)
-    expect(Number.isNaN(dot)).toBe(true)
-    // Cosine similarity also NaN
+    expect(dot).toBe(0)
     const cosine = sparseCosineSimilarity(parsed, query)
-    expect(Number.isNaN(cosine)).toBe(true)
+    expect(cosine).toBe(0)
   })
 
   test("BUG: createPattern -> parsePattern roundtrip loses session_id field", () => {
