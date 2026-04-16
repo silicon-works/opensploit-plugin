@@ -552,7 +552,7 @@ describe("ADVERSARIAL: schema and ID generation", () => {
   })
 
   describe("parsePattern with malformed data", () => {
-    test("BUG HUNT: phases_json with invalid JSON", () => {
+    test("phases_json with invalid JSON returns empty array (BUG-MP-5 FIXED)", () => {
       const record = {
         id: "pat_bad",
         target_profile: { os: "linux", services: [], ports: [], technologies: [], characteristics: [] },
@@ -562,11 +562,13 @@ describe("ADVERSARIAL: schema and ID generation", () => {
         metadata: { source: "local", created_at: "2026-01-01", anonymized: false },
         vector: [],
       }
-      // parsePattern does JSON.parse(phases_json) without try/catch
-      expect(() => parsePattern(record)).toThrow()
+      // FIXED: try/catch returns [] on parse failure instead of throwing
+      const parsed = parsePattern(record)
+      expect(Array.isArray(parsed.methodology.phases)).toBe(true)
+      expect(parsed.methodology.phases.length).toBe(0)
     })
 
-    test("BUG HUNT: phases_json with JSON null", () => {
+    test("phases_json='null' produces empty array (BUG-MP-5 FIXED)", () => {
       const record = {
         id: "pat_null",
         target_profile: { os: "linux" },
@@ -576,14 +578,13 @@ describe("ADVERSARIAL: schema and ID generation", () => {
         metadata: { source: "local", created_at: "2026-01-01", anonymized: false },
         vector: [],
       }
-      // JSON.parse("null") = null, cast as AttackPhase[] -> phases is null
+      // FIXED: JSON.parse("null") = null, but we validate and return []
       const parsed = parsePattern(record)
-      // This is a bug: phases should be [] not null
-      // Downstream code will crash on null.map() or null.length
-      expect(parsed.methodology.phases).toBeNull()
+      expect(Array.isArray(parsed.methodology.phases)).toBe(true)
+      expect(parsed.methodology.phases.length).toBe(0)
     })
 
-    test("BUG HUNT: phases_json with JSON string (not array)", () => {
+    test("phases_json with JSON string returns empty array (BUG-MP-5 FIXED)", () => {
       const record = {
         id: "pat_str",
         target_profile: { os: "linux" },
@@ -594,9 +595,9 @@ describe("ADVERSARIAL: schema and ID generation", () => {
         vector: [],
       }
       const parsed = parsePattern(record)
-      // JSON.parse('"hello"') = "hello", cast as AttackPhase[]
-      // This is a string, not an array
-      expect(typeof parsed.methodology.phases).toBe("string")
+      // FIXED: non-array result returns []
+      expect(Array.isArray(parsed.methodology.phases)).toBe(true)
+      expect(parsed.methodology.phases.length).toBe(0)
     })
 
     test("completely null record fields - optional chaining saves it", () => {

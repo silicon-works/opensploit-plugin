@@ -679,7 +679,12 @@ export function parsePattern(record: Record<string, unknown>): AttackPattern {
       summary: (methodology?.summary as string) ?? "",
       tools_sequence: toArray<string>(methodology?.tools_sequence),
       key_insights: toArray<string>(methodology?.key_insights),
-      phases: JSON.parse(phases_json) as AttackPhase[],
+      phases: ((): AttackPhase[] => {
+        try {
+          const parsed = JSON.parse(phases_json)
+          return Array.isArray(parsed) ? parsed : []
+        } catch { return [] }
+      })(),
     },
     outcome: record.outcome as AttackPattern["outcome"],
     metadata: record.metadata as AttackPattern["metadata"],
