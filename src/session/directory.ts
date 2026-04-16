@@ -66,6 +66,10 @@ export function init(): void {
  * by tools as a fallback when the directory doesn't exist yet.
  */
 export function create(sessionID: string): string {
+  // BUG-TS-2 fix: reject sessionID with path traversal characters
+  if (!sessionID || sessionID.includes("..") || sessionID.includes("/") || sessionID.includes("\\") || sessionID.includes("\0")) {
+    throw new Error(`Invalid sessionID: must not contain path separators or traversal sequences`)
+  }
   const dir = join(tmpdir(), `${SESSION_DIR_PREFIX}${sessionID}`)
 
   if (!existsSync(dir)) {

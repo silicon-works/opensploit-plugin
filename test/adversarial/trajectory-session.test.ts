@@ -249,28 +249,21 @@ describe("Trajectory: appendEntry adversarial", () => {
     expect(entries.length).toBe(0) // Entry silently lost — BUG 3 confirmed
   })
 
-  test("BUG 1: rootSessionID with path traversal — writes outside sessions/", () => {
-    // HYPOTHESIS: No sanitization on rootSessionID
-    // sessionID = "../../tmp/adv-trajectory-escape-test" escapes sessions dir
+  test("BUG 1 FIXED: rootSessionID with path traversal — blocked by validation", () => {
+    // HYPOTHESIS (original): No sanitization on rootSessionID
+    // FIX: ensureSessionDir now validates sessionID and throws internally.
+    // appendEntry catches the error (best-effort recording), so it does NOT throw
+    // to the caller — but the file is NOT written outside sessions/.
     const escapeSuffix = `adv-traj-escape-${randomBytes(4).toString("hex")}`
     const maliciousID = `../../tmp/${escapeSuffix}`
 
-    // appendEntry with path traversal
+    // appendEntry catches the validation error internally (no throw to caller)
     appendEntry(maliciousID, makeEntry({ text: "escaped!" }))
 
-    // Check if file was written outside sessions/
+    // Verify file was NOT written outside sessions/
     const escapedDir = resolve(SESSIONS_DIR, maliciousID)
     const escapedFile = join(escapedDir, "trajectory.jsonl")
-
-    const escaped = existsSync(escapedFile)
-
-    // Clean up the escaped directory
-    if (existsSync(escapedDir)) {
-      rmSync(escapedDir, { recursive: true, force: true })
-    }
-
-    // BUG 1 CONFIRMED: file was written outside sessions/ directory
-    expect(escaped).toBe(true)
+    expect(existsSync(escapedFile)).toBe(false)
   })
 
   test("Rapid sequential writes — ordering preserved", () => {
@@ -342,25 +335,18 @@ describe("Trajectory: appendEntry adversarial", () => {
     expect(entries[0].text).toBe(nastyText)
   })
 
-  test("Empty string sessionID — creates directory named empty string", () => {
-    // HYPOTHESIS: path.join(SESSIONS_DIR, "") = SESSIONS_DIR itself
-    // appendEntry("", entry) would write trajectory.jsonl into the sessions root
+  test("Empty string sessionID FIXED — blocked by validation", () => {
+    // HYPOTHESIS (original): path.join(SESSIONS_DIR, "") = SESSIONS_DIR itself
+    // FIX: ensureSessionDir now rejects empty string sessionID.
+    // appendEntry catches the error internally (no throw to caller).
     const entry = makeEntry({ text: "empty sid" })
 
+    // appendEntry catches the validation error internally (no throw to caller)
     appendEntry("", entry)
 
-    // Check if trajectory.jsonl was written to SESSIONS_DIR itself
+    // Verify trajectory.jsonl was NOT written to SESSIONS_DIR itself
     const filePath = join(SESSIONS_DIR, "trajectory.jsonl")
-    const written = existsSync(filePath)
-
-    // Clean up
-    if (written) {
-      rmSync(filePath)
-    }
-
-    // path.join("/.opensploit/sessions", "") = "/.opensploit/sessions"
-    // So yes, it writes to the sessions root directory — BUG
-    expect(written).toBe(true)
+    expect(existsSync(filePath)).toBe(false)
   })
 })
 
@@ -822,9 +808,11 @@ describe("Event hook: adversarial", () => {
     expect(entries[0].tool).toBe("") // Empty tool name — BUG 10
   })
 
-  test("BUG 11: sessionID with path traversal flows through event hook", async () => {
-    // HYPOTHESIS: getRootSession returns raw sessionID if not registered,
-    // and that flows directly into appendEntry with no sanitization
+  test("BUG 11 FIXED: sessionID with path traversal — event hook catches validation error gracefully", async () => {
+    // HYPOTHESIS (original): getRootSession returns raw sessionID if not registered,
+    // and that flows directly into appendEntry with no sanitization.
+    // FIX: appendEntry now throws on traversal, and the event hook's try/catch
+    // catches it — no crash, no escaped file.
     const escapeSuffix = `adv-evt-escape-${randomBytes(4).toString("hex")}`
     const maliciousSID = `../../tmp/${escapeSuffix}`
 
@@ -847,34 +835,28 @@ describe("Event hook: adversarial", () => {
       },
     })
 
-    // Send a text part
-    await eventHook({
-      event: {
-        type: "message.part.updated",
-        properties: {
-          part: {
-            id: `text-traversal-${escapeSuffix}`,
-            messageID: "msg-path-traversal",
-            sessionID: maliciousSID,
-            type: "text",
-            text: "I escaped the sessions directory!",
+    // Send a text part — event hook should NOT throw (try/catch handles it)
+    await expect(
+      eventHook({
+        event: {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              id: `text-traversal-${escapeSuffix}`,
+              messageID: "msg-path-traversal",
+              sessionID: maliciousSID,
+              type: "text",
+              text: "I escaped the sessions directory!",
+            },
           },
         },
-      },
-    })
+      }),
+    ).resolves.toBeUndefined()
 
-    // Check if file was written outside sessions/
+    // Verify file was NOT written outside sessions/
     const escapedDir = resolve(SESSIONS_DIR, maliciousSID)
     const escapedFile = join(escapedDir, "trajectory.jsonl")
-    const escaped = existsSync(escapedFile)
-
-    // Clean up
-    if (existsSync(escapedDir)) {
-      rmSync(escapedDir, { recursive: true, force: true })
-    }
-
-    // BUG 11 CONFIRMED
-    expect(escaped).toBe(true)
+    expect(existsSync(escapedFile)).toBe(false)
   })
 
   test("session.created with parentID — session.json NOT written", async () => {
@@ -1058,42 +1040,28 @@ describe("Event hook: adversarial", () => {
 // ============================================================================
 
 describe("Session directory: adversarial", () => {
-  test("BUG 4: create() with path traversal sessionID escapes prefix", () => {
-    // HYPOTHESIS: create("../../tmp/X") collapses ../ in path.join, escaping
+  test("BUG 4 FIXED: create() with path traversal sessionID — throws on invalid sessionID", () => {
+    // HYPOTHESIS (original): create("../../tmp/X") collapses ../ in path.join, escaping
     // the opensploit-session- prefix entirely.
-    // path.join("/tmp", "opensploit-session-../../tmp/X") -> "/tmp/tmp/X"
-    // The directory IS created but NOT under opensploit-session-* namespace.
+    // FIX: create() now validates sessionID and throws on traversal sequences.
     const escapeSuffix = `adv-dir-escape-${randomBytes(4).toString("hex")}`
     const maliciousID = `../../tmp/${escapeSuffix}`
 
-    const dir = SessionDirectory.create(maliciousID)
+    expect(() => SessionDirectory.create(maliciousID)).toThrow("Invalid sessionID")
 
-    const exists = existsSync(dir)
-
-    // Clean up
-    if (exists) {
-      rmSync(dir, { recursive: true, force: true })
-    }
-
-    // BUG 4 CONFIRMED: directory was created
-    expect(exists).toBe(true)
-
-    // The path does NOT start with the expected "opensploit-session-" prefix
-    // path.join collapses the ../.. so the dir is /tmp/tmp/X, not /tmp/opensploit-session-.../
-    const expectedPrefix = join(tmpdir(), "opensploit-session-")
-    expect(dir.startsWith(expectedPrefix)).toBe(false) // Escapes the session namespace
+    // Verify directory was NOT created outside session namespace
+    const escapedDir = resolve(join(tmpdir(), `opensploit-session-${maliciousID}`))
+    expect(existsSync(escapedDir)).toBe(false)
   })
 
-  test("create() with empty string sessionID", () => {
-    // HYPOTHESIS: path.join(tmpdir(), "opensploit-session-") is the dir
-    const dir = SessionDirectory.create("")
+  test("create() with empty string sessionID FIXED — throws on invalid sessionID", () => {
+    // HYPOTHESIS (original): path.join(tmpdir(), "opensploit-session-") is the dir
+    // FIX: create() now rejects empty string sessionID
+    expect(() => SessionDirectory.create("")).toThrow("Invalid sessionID")
 
-    // This creates: /tmp/opensploit-session- (with trailing dash, no ID)
-    expect(existsSync(dir)).toBe(true)
-    expect(dir).toBe(join(tmpdir(), "opensploit-session-"))
-
-    // Clean up
-    rmSync(dir, { recursive: true, force: true })
+    // Verify no directory was created with trailing dash
+    const badDir = join(tmpdir(), "opensploit-session-")
+    expect(existsSync(badDir)).toBe(false)
   })
 
   test("create() is idempotent — second call does not recreate subdirs", () => {

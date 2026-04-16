@@ -93,6 +93,10 @@ export interface SessionMeta {
  * Ensure the session directory exists. Returns the directory path.
  */
 export function ensureSessionDir(sessionID: string): string {
+  // BUG-TS-1 fix: reject sessionID with path traversal characters
+  if (!sessionID || sessionID.includes("..") || sessionID.includes("/") || sessionID.includes("\\") || sessionID.includes("\0")) {
+    throw new Error(`Invalid sessionID: must not contain path separators or traversal sequences`)
+  }
   const dir = path.join(SESSIONS_DIR, sessionID)
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
