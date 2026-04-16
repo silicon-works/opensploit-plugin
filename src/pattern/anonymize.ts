@@ -65,13 +65,14 @@ const USERNAME_PATTERNS = [
 ]
 
 // Password patterns
+// BUG-MP-1 fix: added \s* after separator to handle "password: value" (colon+space)
 const PASSWORD_PATTERNS = [
-  /password[=:\s]["']?([^"'\s]+)["']?/gi,
-  /passwd[=:\s]["']?([^"'\s]+)["']?/gi,
-  /pwd[=:\s]["']?([^"'\s]+)["']?/gi,
+  /password[=:\s]\s*["']?([^"'\s]+)["']?/gi,
+  /passwd[=:\s]\s*["']?([^"'\s]+)["']?/gi,
+  /pwd[=:\s]\s*["']?([^"'\s]+)["']?/gi,
   /-p\s+["']?([^"'\s]+)["']?/gi,
   /--password[=\s]+["']?([^"'\s]+)["']?/gi,
-  /secret[=:\s]["']?([^"'\s]+)["']?/gi,
+  /secret[=:\s]\s*["']?([^"'\s]+)["']?/gi,
 ]
 
 // SSH keys (PEM format)

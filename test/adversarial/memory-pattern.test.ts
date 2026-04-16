@@ -819,12 +819,10 @@ describe("ADVERSARIAL: anonymization", () => {
       expect(result).toContain("[REDACTED]")
     })
 
-    test("BUG 1: password with colon+space separator leaks through", () => {
+    test("FIXED: password with colon+space separator now redacted", () => {
       const result = anonymizeText("password: letmein")
-      // BUG: Regex /password[=:\s]["']?([^"'\s]+)/ — after consuming ':',
-      // the space is not consumed by ["']?, and ([^"'\s]+) cannot start at space.
-      // So "password: letmein" is NOT matched. The password leaks.
-      expect(result).toContain("letmein") // Confirms the bug: password NOT redacted
+      expect(result).not.toContain("letmein")
+      expect(result).toContain("[REDACTED]")
     })
 
     test("-p flag with password", () => {
@@ -842,18 +840,16 @@ describe("ADVERSARIAL: anonymization", () => {
       }
     })
 
-    test("BUG 1b: secret pattern - equals works, colon+space does not", () => {
+    test("FIXED: secret pattern with colon+space now redacted", () => {
       const result1 = anonymizeText("secret=my_api_key_123")
-      expect(result1).toContain("[REDACTED]") // Equals sign works
+      expect(result1).toContain("[REDACTED]")
 
       const result2 = anonymizeText("secret: my_api_key_123")
-      // BUG: Same regex issue as password. Colon consumed by [=:\s],
-      // space left over, capture group can't start at space.
-      expect(result2).toContain("my_api_key_123") // Confirms the bug: NOT redacted
+      expect(result2).not.toContain("my_api_key_123")
+      expect(result2).toContain("[REDACTED]")
 
       const result3 = anonymizeText("secret my_api_key_123")
-      // Space is consumed by [=:\s], then ["']? optional, capture starts at "my_api..."
-      expect(result3).toContain("[REDACTED]") // Space-only separator works
+      expect(result3).toContain("[REDACTED]")
     })
 
     test("BUG HUNT: unicode in passwords", () => {
