@@ -385,6 +385,10 @@ export function createMcpTool() {
             for (const item of r.content as Array<{ type: string; text?: string }>) {
               if (item.type === "text" && item.text) {
                 rawOutput += item.text + "\n"
+              } else if (item.type === "image") {
+                rawOutput += `[image: ${(item as any).mimeType || "unknown"}]\n`
+              } else if (item.type) {
+                rawOutput += `[${item.type} content]\n`
               }
             }
           } else {
