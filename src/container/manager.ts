@@ -333,12 +333,15 @@ export namespace ContainerManager {
     const mergedEnv: Record<string, string> = {
       ...(envOverrides.get(toolName) ?? {}),
       ...(options?.env ?? {}),
-      // Clock offset via libfaketime (for Kerberos clock skew)
-      ...(options?.clockOffset ? {
-        LD_PRELOAD: "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1",
-        FAKETIME: options.clockOffset,
-        FAKETIME_DONT_FAKE_MONOTONIC: "1",
-      } : {}),
+    }
+    // Clock offset via libfaketime (for Kerberos clock skew)
+    // Append to existing LD_PRELOAD instead of overwriting
+    if (options?.clockOffset) {
+      const faketimePath = "/usr/lib/x86_64-linux-gnu/faketime/libfaketime.so.1"
+      const existingPreload = mergedEnv.LD_PRELOAD
+      mergedEnv.LD_PRELOAD = existingPreload ? `${existingPreload}:${faketimePath}` : faketimePath
+      mergedEnv.FAKETIME = options.clockOffset
+      mergedEnv.FAKETIME_DONT_FAKE_MONOTONIC = "1"
     }
 
     // Network configuration
