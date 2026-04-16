@@ -440,6 +440,8 @@ export function mergeState(existing: EngagementState, updates: Partial<Engagemen
         // Dedupe by port+protocol
         const merged = [...existingArray]
         for (const item of value) {
+          // Skip entries with NaN/invalid port (NaN !== NaN breaks dedup)
+          if (typeof item.port !== "number" || Number.isNaN(item.port)) continue
           const exists = merged.some(
             (p: any) => p.port === item.port && p.protocol === item.protocol
           )

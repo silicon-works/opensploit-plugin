@@ -322,18 +322,17 @@ describe("ATTACK: invalid port numbers", () => {
     expect(result.ports?.[0]?.port).toBe(99999)
   })
 
-  test("port NaN does not break dedup", () => {
+  test("NaN ports are skipped during merge (BUG-ES-3 FIXED)", () => {
     const existing: EngagementState = {
       ports: [{ port: NaN, protocol: "tcp", service: "first" }],
     }
-    // NaN !== NaN, so dedup check `p.port === item.port` will be false
-    // This means every NaN port will be treated as new
+    // FIXED: incoming NaN ports are dropped to prevent accumulation
     const result = mergeState(existing, {
       ports: [{ port: NaN, protocol: "tcp", service: "second" }],
     })
-    // BUG: NaN ports accumulate because NaN !== NaN
-    // Two NaN ports should be deduped as the same, but they won't be
-    expect(result.ports?.length).toBe(2) // Will be 2 = BUG (should be 1)
+    // Existing NaN stays, but new NaN is rejected — no accumulation
+    expect(result.ports?.length).toBe(1)
+    expect(result.ports?.[0]?.service).toBe("first")
   })
 
   test("port Infinity is stored", () => {
