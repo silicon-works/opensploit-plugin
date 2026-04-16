@@ -84,7 +84,8 @@ export namespace TargetValidation {
     }
 
     // BUG-SH-4 fix: strip port suffix (e.g., 10.10.10.1:8080 → 10.10.10.1)
-    const withoutPort = input.replace(/:\d+$/, "")
+    // BUG-SH-2 fix: strip CIDR suffix (e.g., 10.0.0.0/8 → 10.0.0.0)
+    const withoutPort = input.replace(/:\d+$/, "").replace(/\/\d{1,3}$/, "")
 
     // Check if it's an IP address
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(withoutPort)) {

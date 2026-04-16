@@ -203,24 +203,20 @@ describe("ADVERSARIAL: Target Validation Bypass", () => {
   // ---------------------------------------------------------------------------
 
   describe("CIDR notation", () => {
-    test("BUG 2: CIDR 10.0.0.0/8 is not parsed as IP", () => {
+    test("FIXED: CIDR 10.0.0.0/8 correctly parsed as IP", () => {
       const extracted = TargetValidation.extractTarget("10.0.0.0/8")
-      // "10.0.0.0/8" doesn't match the IP regex (has /8 suffix)
-      // Treated as hostname
-      expect(extracted.hostname).toBe("10.0.0.0/8")
-      expect(extracted.ip).toBeUndefined()
+      expect(extracted.ip).toBe("10.0.0.0")
     })
 
-    test("BUG 2: classifyTarget on CIDR 10.0.0.0/8 returns external", () => {
+    test("FIXED: CIDR 10.0.0.0/8 classified as private", () => {
       const info = TargetValidation.classifyTarget("10.0.0.0/8")
-      // Should be "private" since 10.0.0.0 is RFC1918
-      expect(info.type).toBe("external") // Bug: private CIDR classified as external
-      expect(info.isExternal).toBe(true)
+      expect(info.type).toBe("private")
+      expect(info.isExternal).toBe(false)
     })
 
-    test("CIDR 192.168.1.0/24 classified as external", () => {
+    test("FIXED: CIDR 192.168.1.0/24 classified as private", () => {
       const info = TargetValidation.classifyTarget("192.168.1.0/24")
-      expect(info.type).toBe("external") // Bug: should be private
+      expect(info.type).toBe("private")
     })
   })
 
