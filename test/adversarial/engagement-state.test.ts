@@ -633,7 +633,7 @@ describe("ATTACK: credential dedup with empty username", () => {
     expect(result.credentials?.[0]?.password).toBe("new")
   })
 
-  test("credential with service=undefined and service='ssh' are NOT deduped", () => {
+  test("credential with service=undefined and service='ssh' ARE deduped (BUG-ES-5 FIXED)", () => {
     const existing: EngagementState = {
       credentials: [{ username: "admin" }],
     }
@@ -642,8 +642,9 @@ describe("ATTACK: credential dedup with empty username", () => {
     }
     const result = mergeState(existing, updates)
 
-    // undefined !== "ssh", so these are treated as different credentials
-    expect(result.credentials?.length).toBe(2)
+    // FIXED: when one side has no service, match on username alone (progressive discovery)
+    expect(result.credentials?.length).toBe(1)
+    expect(result.credentials?.[0]?.service).toBe("ssh") // Updated with more detail
   })
 })
 

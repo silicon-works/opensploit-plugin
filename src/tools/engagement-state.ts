@@ -458,19 +458,17 @@ export function mergeState(existing: EngagementState, updates: Partial<Engagemen
         (result as any)[key] = merged
       } else if (key === "credentials") {
         // Dedupe by username+service
+        // When one side has no service, match on username alone (progressive discovery)
         const merged = [...existingArray]
         for (const item of value) {
-          const exists = merged.some(
-            (c: any) => c.username === item.username && c.service === item.service
-          )
-          if (!exists) merged.push(item)
-          else {
-            // Update existing entry
-            const idx = merged.findIndex(
-              (c: any) => c.username === item.username && c.service === item.service
-            )
-            if (idx !== -1) merged[idx] = { ...merged[idx], ...item }
-          }
+          const matchIdx = merged.findIndex((c: any) => {
+            if (c.username !== item.username) return false
+            // If either side has no service, match on username alone
+            if (!c.service || !item.service) return true
+            return c.service === item.service
+          })
+          if (matchIdx === -1) merged.push(item)
+          else merged[matchIdx] = { ...merged[matchIdx], ...item }
         }
         (result as any)[key] = merged
       } else if (key === "sessions") {
