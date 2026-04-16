@@ -908,7 +908,9 @@ function scoreAndGroupMethods(
     let denseScore = 0
     if (row._distance != null) {
       // Vector distance → similarity (cosine: lower = more similar)
-      denseScore = 1 / (1 + row._distance)
+      // Guard: clamp to non-negative to prevent score > 1.0 or Infinity
+      const dist = Math.max(0, row._distance)
+      denseScore = 1 / (1 + dist)
     } else if (row._score != null) {
       // FTS BM25 score — normalize to 0-1 range
       denseScore = Math.min(row._score / 20, 1)

@@ -648,7 +648,7 @@ describe("ATTACK: scoring arithmetic edge cases", () => {
    * formula 1/(1+negative) could produce a score > 1 or even divide
    * by zero if _distance == -1.
    */
-  test("negative distance produces score > 1", () => {
+  test("negative distance is clamped to 0 (BUG-RS-3 FIXED)", () => {
     const registry = makeRegistry({
       nmap: { name: "nmap", description: "Network scanner" },
     })
@@ -658,7 +658,7 @@ describe("ATTACK: scoring arithmetic edge cases", () => {
       method_name: "scan",
       method_description: "Scan ports",
       when_to_use: "",
-      _distance: -0.5, // Bug: negative distance
+      _distance: -0.5, // Would give 2.0 without clamping
       sparse_json: null,
       see_also_json: null,
     }]
@@ -668,16 +668,16 @@ describe("ATTACK: scoring arithmetic edge cases", () => {
       fakeRows, registry, "scan", undefined, undefined, null, warnings
     )
 
-    // 1/(1 + (-0.5)) = 1/0.5 = 2.0 — score is 2.0, way above expected [0,1]
+    // FIXED: distance clamped to 0, so 1/(1+0) = 1.0 max
     expect(results.length).toBe(1)
-    expect(results[0].score).toBeGreaterThan(1.0) // BUG: score exceeds 1.0
+    expect(results[0].score).toBeLessThanOrEqual(1.0)
   })
 
   /**
    * HYPOTHESIS: If _distance is exactly -1, the formula 1/(1+(-1)) = 1/0
    * which is Infinity. This would produce Infinity as the tool score.
    */
-  test("distance of exactly -1 causes division by zero", () => {
+  test("distance of exactly -1 does not cause division by zero (BUG-RS-3 FIXED)", () => {
     const registry = makeRegistry({
       nmap: { name: "nmap", description: "Network scanner" },
     })
@@ -687,7 +687,7 @@ describe("ATTACK: scoring arithmetic edge cases", () => {
       method_name: "scan",
       method_description: "Scan ports",
       when_to_use: "",
-      _distance: -1.0, // Exact -1 causes 1/(1+(-1)) = 1/0 = Infinity
+      _distance: -1.0, // Would cause Infinity without clamping
       sparse_json: null,
       see_also_json: null,
     }]
@@ -697,9 +697,10 @@ describe("ATTACK: scoring arithmetic edge cases", () => {
       fakeRows, registry, "scan", undefined, undefined, null, warnings
     )
 
-    // 1/(1+(-1)) = Infinity
+    // FIXED: distance clamped to 0, so 1/(1+0) = 1.0
     expect(results.length).toBe(1)
-    expect(results[0].score).toBe(Infinity) // BUG: Infinity score
+    expect(results[0].score).toBe(1.0) // No longer Infinity
+    expect(Number.isFinite(results[0].score)).toBe(true)
   })
 
   /**
