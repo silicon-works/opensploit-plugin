@@ -328,6 +328,8 @@ export function containsSensitiveData(text: string): boolean {
   }
 
   // Check for SSH keys
+  // BUG-MP-2 fix: reset lastIndex before .test() — /g flag causes stateful behavior
+  SSH_KEY_PATTERN.lastIndex = 0
   if (SSH_KEY_PATTERN.test(text)) return true
 
   // Check for potential API keys (reset pattern state)

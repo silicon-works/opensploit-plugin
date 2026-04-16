@@ -1060,20 +1060,15 @@ Key 2: -----BEGIN OPENSSH PRIVATE KEY-----\ndata2\n-----END OPENSSH PRIVATE KEY-
       expect(result1).toBe(result2)
     })
 
-    test("BUG 2: SSH key regex state after test() - alternating results", () => {
-      // SSH_KEY_PATTERN is /g (global), .test() advances lastIndex
-      // On first call, lastIndex=0, matches -> lastIndex advances past match
-      // On second call, lastIndex is past the string, no match -> returns false, resets to 0
-      // On third call, lastIndex=0 again, matches -> true
-      // This produces alternating true/false/true/false for identical input!
+    test("FIXED: SSH key regex returns consistent results on repeated calls", () => {
       const text = "-----BEGIN RSA PRIVATE KEY-----\ndata\n-----END RSA PRIVATE KEY-----"
       const r1 = containsSensitiveData(text)
       const r2 = containsSensitiveData(text)
       const r3 = containsSensitiveData(text)
+      // All three calls should return true — lastIndex reset before .test()
       expect(r1).toBe(true)
-      // BUG: Second call returns false because global regex lastIndex is past the match
-      expect(r2).toBe(false) // Confirms the bug: non-deterministic result
-      expect(r3).toBe(true)  // Third call works again (lastIndex reset after failure)
+      expect(r2).toBe(true)
+      expect(r3).toBe(true)
     })
   })
 
