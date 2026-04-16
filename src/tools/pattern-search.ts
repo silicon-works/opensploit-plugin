@@ -109,44 +109,49 @@ export function createPatternSearchTool() {
         limit,
       })
 
-      // Build query
-      const query: PatternQuery = {
-        target_profile: {
-          os: target_profile.os,
-          services: target_profile.services,
-          technologies: target_profile.technologies,
-          characteristics: target_profile.characteristics,
-        },
-        objective,
-        limit,
-      }
-
-      // Search patterns
-      const results = await searchPatterns(query)
-
-      // Format output
-      const output = formatPatternResults(results, query)
-
-      // Determine if this is a cold start
-      const isColdStart = results.length === 1 && results[0].pattern_id === ""
-
-      ctx.metadata({
-        title: isColdStart
-          ? "Pattern search: no patterns yet"
-          : `Pattern search: ${results.length} pattern(s) found`,
-        metadata: {
-          query: {
+      try {
+        // Build query
+        const query: PatternQuery = {
+          target_profile: {
             os: target_profile.os,
             services: target_profile.services,
-            objective,
+            technologies: target_profile.technologies,
+            characteristics: target_profile.characteristics,
           },
-          results_count: isColdStart ? 0 : results.length,
-          top_similarity: isColdStart ? 0 : results[0]?.similarity,
-          cold_start: isColdStart,
-        },
-      })
+          objective,
+          limit: Math.max(0, limit),
+        }
 
-      return output
+        // Search patterns
+        const results = await searchPatterns(query)
+
+        // Format output
+        const output = formatPatternResults(results ?? [], query)
+
+        // Determine if this is a cold start
+        const isColdStart = results.length === 1 && results[0].pattern_id === ""
+
+        ctx.metadata({
+          title: isColdStart
+            ? "Pattern search: no patterns yet"
+            : `Pattern search: ${results.length} pattern(s) found`,
+          metadata: {
+            query: {
+              os: target_profile.os,
+              services: target_profile.services,
+              objective,
+            },
+            results_count: isColdStart ? 0 : results.length,
+            top_similarity: isColdStart ? 0 : results[0]?.similarity,
+            cold_start: isColdStart,
+          },
+        })
+
+        return output
+      } catch (error) {
+        log.error("pattern search failed", { error })
+        return `Pattern search error: ${error instanceof Error ? error.message : String(error)}`
+      }
     },
   })
 }

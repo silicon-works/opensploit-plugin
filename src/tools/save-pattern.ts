@@ -50,10 +50,16 @@ export function createSavePatternTool() {
 
       log.info("save_pattern called", { sessionID, engagementType: params.engagement_type })
 
-      const result: CaptureResult = await capturePattern(sessionID, {
-        userTriggered: true,
-        engagementType: params.engagement_type,
-      })
+      let result: CaptureResult
+      try {
+        result = await capturePattern(sessionID, {
+          userTriggered: true,
+          engagementType: params.engagement_type,
+        })
+      } catch (error) {
+        log.error("save_pattern failed", { error })
+        return `Pattern save error: ${error instanceof Error ? error.message : String(error)}`
+      }
 
       // Build output based on result
       let output: string
@@ -61,6 +67,7 @@ export function createSavePatternTool() {
 
       if (result.success && result.pattern) {
         const pattern = result.pattern
+        const insights = Array.isArray(pattern.methodology.key_insights) ? pattern.methodology.key_insights : []
         output = [
           "**Pattern Saved Successfully**",
           "",
@@ -82,7 +89,7 @@ export function createSavePatternTool() {
           pattern.outcome.flags_captured ? `- Flags Captured: ${pattern.outcome.flags_captured}` : null,
           "",
           "**Key Insights:**",
-          ...(pattern.methodology.key_insights.map((i: string) => `- ${i}`) || ["- None recorded"]),
+          ...(insights.length > 0 ? insights.map((i: string) => `- ${i}`) : ["- None recorded"]),
           "",
           "_Pattern has been anonymized and stored for future similarity search._",
         ]
