@@ -687,11 +687,10 @@ describe("ATTACK: toolFailures count overflow", () => {
   })
 
   /**
-   * HYPOTHESIS: The merge code uses `(merged[idx].count || 1) + 1`.
-   * This IGNORES the incoming item's count — it always increments by 1.
-   * If the update carries count=5, the existing count goes up by 1, not 5.
+   * FIXED (BUG-ES-6): The merge code now uses `(merged[idx].count ?? 0) + (item.count ?? 1)`.
+   * The incoming item's count is properly added to the existing count.
    */
-  test("incoming count value is IGNORED (always increments by 1)", () => {
+  test("incoming count value is respected (added to existing)", () => {
     const existing: EngagementState = {
       toolFailures: [{
         tool: "sqlmap",
@@ -712,17 +711,16 @@ describe("ATTACK: toolFailures count overflow", () => {
     }
     const result = mergeState(existing, updates)
 
-    // BUG: count becomes 3 + 1 = 4, not 3 + 10 = 13
-    // The incoming count is completely ignored
-    expect(result.toolFailures?.[0]?.count).toBe(4)
+    // FIXED: count becomes 3 + 10 = 13
+    expect(result.toolFailures?.[0]?.count).toBe(13)
   })
 
-  test("toolFailures with count=0 uses fallback 1", () => {
+  test("toolFailures with count=0 correctly preserves zero", () => {
     const existing: EngagementState = {
       toolFailures: [{
         tool: "hydra",
         error: "auth error",
-        count: 0, // edge: 0 is falsy
+        count: 0, // edge: 0 is falsy but valid
         firstSeen: "2026-01-01",
         lastSeen: "2026-01-02",
       }],
@@ -738,9 +736,9 @@ describe("ATTACK: toolFailures count overflow", () => {
     }
     const result = mergeState(existing, updates)
 
-    // (0 || 1) + 1 = 2 — the `|| 1` coerces 0 to 1, then adds 1
-    // BUG: count of 0 is treated as count of 1 because of || operator
-    expect(result.toolFailures?.[0]?.count).toBe(2)
+    // FIXED (BUG-ES-7): (0 ?? 0) + (1 ?? 1) = 0 + 1 = 1
+    // count=0 is correctly treated as 0, not coerced to 1
+    expect(result.toolFailures?.[0]?.count).toBe(1)
   })
 })
 

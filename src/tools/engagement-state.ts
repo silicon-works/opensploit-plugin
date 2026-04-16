@@ -495,9 +495,11 @@ export function mergeState(existing: EngagementState, updates: Partial<Engagemen
             (f: any) => f.tool === item.tool && (f.method || "") === (item.method || "")
           )
           if (idx !== -1) {
+            // BUG-ES-6/ES-7 fix: use ?? instead of || (0 is valid count),
+            // and add incoming count instead of always +1
             merged[idx] = {
               ...merged[idx],
-              count: (merged[idx].count || 1) + 1,
+              count: (merged[idx].count ?? 0) + (item.count ?? 1),
               lastSeen: item.lastSeen || new Date().toISOString(),
               error: item.error,
             }

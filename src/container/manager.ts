@@ -519,7 +519,7 @@ export namespace ContainerManager {
           continue
         }
 
-        const timeout = container.idleTimeout || IDLE_TIMEOUT_MS
+        const timeout = container.idleTimeout ?? IDLE_TIMEOUT_MS // BUG-CM-7 fix: 0 is valid
         if (now - container.lastUsed > timeout) {
           log.info("stopping idle container", { toolName, idleMs: now - container.lastUsed, timeoutMs: timeout })
           stopContainer(toolName).catch((error) => {

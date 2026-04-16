@@ -239,9 +239,10 @@ export function createMcpTool() {
       const methodDefForTimeout = toolDef.methods?.[method]
       const methodTimeout = methodDefForTimeout?.timeout_seconds
       const toolTimeout = toolDef.timeout_seconds
-      const timeoutMs = agentTimeout ? agentTimeout * 1000
-        : methodTimeout ? methodTimeout * 1000
-        : toolTimeout ? toolTimeout * 1000
+      // BUG-CM-9 fix: use != null instead of truthiness (0 is valid timeout)
+      const timeoutMs = agentTimeout != null ? agentTimeout * 1000
+        : methodTimeout != null ? methodTimeout * 1000
+        : toolTimeout != null ? toolTimeout * 1000
         : 300_000
 
       try {
@@ -441,7 +442,7 @@ export function createMcpTool() {
             const toolFailures = state?.toolFailures || []
             const existing = toolFailures.find((f: any) => f.tool === toolName && f.method === method)
             if (existing) {
-              existing.count = (existing.count || 1) + 1
+              existing.count = (existing.count ?? 0) + 1 // BUG-CM-13 fix: ?? instead of ||
               existing.lastSeen = new Date().toISOString()
               existing.error = errorMessage.slice(0, 200)
             } else {
