@@ -944,10 +944,11 @@ function scoreAndGroupMethods(
       const phaseBonus = (phase && tool.phases?.includes(phase)) ? 0.15 : 0
 
       // Normalize bonuses to 0-1 range instead of raw +35/-15
-      const routingAdjustment = Math.min(
+      // Clamp to [-0.5, 0.5] so no single signal dominates the final score
+      const routingAdjustment = Math.max(-0.5, Math.min(
         (triggerBonus / 35 * 0.3) + (useForBonus / 8 * 0.15) + (neverUseForPenalty / 15 * 0.2) + phaseBonus,
         0.5
-      )
+      ))
 
       const antiPatternWarning = checkAntiPatterns(query, tool)
       if (antiPatternWarning) warnings.push(antiPatternWarning)
@@ -1065,10 +1066,10 @@ function searchToolsInMemory(
     }
     if (searchText.includes(query.toLowerCase())) score += 5
 
-    // Routing bonuses
+    // Routing bonuses (clamp penalty to -30 so it can't dominate the score)
     score += calculateTriggerBonus(query, tool)
     score += calculateUseForBonus(query, tool)
-    score += calculateNeverUseForPenalty(query, tool)
+    score += Math.max(-30, calculateNeverUseForPenalty(query, tool))
 
     if (phase && tool.phases?.includes(phase)) {
       score += 5

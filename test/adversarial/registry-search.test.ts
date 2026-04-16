@@ -211,7 +211,7 @@ describe("ATTACK: routing bonus normalization edge cases", () => {
    * making a tool with a high dense score appear with a very low total score.
    */
 
-  test("never_use_for penalty is unbounded below -0.5", () => {
+  test("never_use_for penalty is clamped at -0.5 (BUG-RS-2 FIXED)", () => {
     const tool = makeTool({
       name: "bad-tool",
       description: "A tool with many anti-patterns",
@@ -229,21 +229,15 @@ describe("ATTACK: routing bonus normalization edge cases", () => {
     // This query matches ALL five never_use_for entries
     const penalty = calculateNeverUseForPenalty("scanning port network tcp host discovery", tool)
 
-    // Each match adds -15, so 5 matches = -75
+    // Each match adds -15, so 5 matches = -75 (raw penalty unchanged)
     expect(penalty).toBe(-75)
 
-    // In the routing normalization: (-75/15)*0.2 = -1.0
-    // With no lower bound, routingAdjustment could be -1.0 + phaseBonus(0)
-    // which is well below -0.5 (the cap only applies upward)
-    const normalizedContribution = (penalty / 15) * 0.2
-    expect(normalizedContribution).toBe(-1.0) // Can go below -0.5
-
-    // The actual formula uses Math.min(..., 0.5) which only caps above
-    const routingAdjustment = Math.min(
+    // FIXED: The routing normalization now clamps to [-0.5, 0.5]
+    const routingAdjustment = Math.max(-0.5, Math.min(
       (0 / 35 * 0.3) + (0 / 8 * 0.15) + (penalty / 15 * 0.2) + 0,
       0.5
-    )
-    expect(routingAdjustment).toBeLessThan(-0.5) // PROVES: no lower bound
+    ))
+    expect(routingAdjustment).toBe(-0.5) // Clamped — penalty can't dominate score
   })
 
   /**
