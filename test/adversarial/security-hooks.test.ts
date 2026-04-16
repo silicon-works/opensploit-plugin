@@ -271,20 +271,20 @@ describe("ADVERSARIAL: Target Validation Bypass", () => {
   // Trailing dot hostname
   // ---------------------------------------------------------------------------
 
-  describe("trailing dot hostname", () => {
-    test("BUG 6: target.htb. (trailing dot) NOT classified as internal", () => {
+  describe("trailing dot hostname (BUG-SH-7 FIXED)", () => {
+    test("target.htb. (trailing dot) IS classified as internal", () => {
       const result = TargetValidation.isInternalHostname("target.htb.")
-      // Regex /\.htb$/i does NOT match because last char is "."
-      expect(result).toBe(false) // Bug: trailing dot breaks matching
+      // FIXED: trailing dot stripped before pattern matching
+      expect(result).toBe(true)
     })
 
-    test("BUG 6: classifyTarget with trailing dot is external", () => {
+    test("classifyTarget with trailing dot is internal", () => {
       const info = TargetValidation.classifyTarget("target.htb.")
-      expect(info.type).toBe("external") // Bug: should be "internal"
+      expect(info.type).toBe("internal")
     })
 
-    test("host.local. also fails internal check", () => {
-      expect(TargetValidation.isInternalHostname("host.local.")).toBe(false) // Bug
+    test("host.local. also passes internal check", () => {
+      expect(TargetValidation.isInternalHostname("host.local.")).toBe(true)
     })
   })
 

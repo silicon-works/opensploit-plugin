@@ -58,6 +58,8 @@ export namespace TargetValidation {
    * Check if a hostname is likely internal (HTB, lab, etc.)
    */
   export function isInternalHostname(hostname: string): boolean {
+    // Strip trailing dot (DNS FQDN notation) before matching
+    const normalized = hostname.endsWith(".") ? hostname.slice(0, -1) : hostname
     const internalPatterns = [
       /\.htb$/i, // HackTheBox
       /\.local$/i, // Local network
@@ -72,7 +74,7 @@ export namespace TargetValidation {
       /\.intranet$/i, // Intranet
     ]
 
-    return internalPatterns.some((pattern) => pattern.test(hostname))
+    return internalPatterns.some((pattern) => pattern.test(normalized))
   }
 
   /**
