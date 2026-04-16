@@ -1053,8 +1053,14 @@ function searchToolsInMemory(
     const queryWords = query.toLowerCase().split(/\s+/).filter((w) => w.length > 1)
     let score = 0
     for (const word of queryWords) {
-      const regex = new RegExp(`\\b${word}\\b`, "g")
-      score += (searchText.match(regex) || []).length * 3
+      // Escape regex metacharacters to prevent crash on queries like "scan (TCP)"
+      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      try {
+        const regex = new RegExp(`\\b${escaped}\\b`, "g")
+        score += (searchText.match(regex) || []).length * 3
+      } catch {
+        // Fallback to simple includes if regex still fails
+      }
       if (searchText.includes(word)) score += 1
     }
     if (searchText.includes(query.toLowerCase())) score += 5

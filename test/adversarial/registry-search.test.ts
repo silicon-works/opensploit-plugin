@@ -142,16 +142,16 @@ describe("ATTACK: regex injection via query words", () => {
    * exception that propagates up and kills the tool call. This is especially
    * likely with pentest queries like "scan (TCP)" or "check [http]".
    */
-  test("BUG: query with unclosed parenthesis CRASHES (regex injection)", () => {
+  test("FIXED: query with unclosed parenthesis no longer crashes", () => {
     expect(() => {
       searchToolsInMemory(registry, "scan (port", undefined, undefined, 5)
-    }).toThrow("Invalid regular expression")
+    }).not.toThrow()
   })
 
-  test("BUG: query with unclosed bracket CRASHES (regex injection)", () => {
+  test("FIXED: query with unclosed bracket no longer crashes", () => {
     expect(() => {
       searchToolsInMemory(registry, "scan [port", undefined, undefined, 5)
-    }).toThrow("Invalid regular expression")
+    }).not.toThrow()
   })
 
   test("query with asterisk does not crash (bun treats as zero-length)", () => {
@@ -186,10 +186,10 @@ describe("ATTACK: regex injection via query words", () => {
     }).not.toThrow()
   })
 
-  test("BUG: query of entirely regex metacharacters CRASHES", () => {
+  test("FIXED: query of entirely regex metacharacters no longer crashes", () => {
     expect(() => {
       searchToolsInMemory(registry, "([{*+?^$|\\", undefined, undefined, 5)
-    }).toThrow("Invalid regular expression")
+    }).not.toThrow()
   })
 })
 
