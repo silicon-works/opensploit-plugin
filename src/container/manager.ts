@@ -82,6 +82,9 @@ export namespace ContainerManager {
   // Track running containers
   const containers = new Map<string, ManagedContainer>()
 
+  // Prevent concurrent getClient() for the same tool from orphaning containers
+  const pendingSpawns = new Map<string, Promise<Client>>()
+
   // Track active service containers by service name for network sharing
   const serviceContainers = new Map<string, string>() // serviceName -> toolName
   let cleanupInterval: ReturnType<typeof setInterval> | null = null
@@ -262,6 +265,24 @@ export namespace ContainerManager {
       log.debug("reusing existing container", { toolName, image })
       return existing.client
     }
+
+    // Prevent concurrent spawns for the same tool (BUG-CM-8 fix)
+    const pending = pendingSpawns.get(toolName)
+    if (pending) {
+      log.debug("waiting for pending spawn", { toolName })
+      return pending
+    }
+
+    const spawnPromise = doGetClient(toolName, image, options)
+    pendingSpawns.set(toolName, spawnPromise)
+    try {
+      return await spawnPromise
+    } finally {
+      pendingSpawns.delete(toolName)
+    }
+  }
+
+  async function doGetClient(toolName: string, image: string, options?: ContainerOptions): Promise<Client> {
 
     // Check Docker availability
     if (!(await isDockerAvailable())) {
