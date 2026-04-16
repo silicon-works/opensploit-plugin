@@ -219,7 +219,8 @@ export function createMcpTool() {
 
       // Get registry
       const registry = await getRegistry()
-      const toolDef = registry.tools[toolName]
+      // BUG-CM-5 fix: guard against null/undefined tools
+      const toolDef = registry?.tools?.[toolName]
 
       if (!toolDef) {
         return `Tool "${toolName}" not found in registry.\n\nUse tool_registry_search to find available tools.`

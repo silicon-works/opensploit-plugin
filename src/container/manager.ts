@@ -134,7 +134,8 @@ export namespace ContainerManager {
    */
   export async function imageExists(image: string): Promise<boolean> {
     try {
-      const proc = spawn(["docker", "image", "inspect", image], {
+      // BUG-CM-3 fix: add "--" to prevent image names like "--help" being treated as flags
+      const proc = spawn(["docker", "image", "inspect", "--", image], {
         stdout: "ignore",
         stderr: "ignore",
       })
@@ -348,11 +349,18 @@ export namespace ContainerManager {
       log.info("running container in privileged mode", { toolName, image })
     }
     // Docker resource limits
+    // BUG-CM-1/CM-2 fix: validate resource limits are finite positive numbers
     if (options?.resources?.memory_mb != null) {
-      dockerArgs.push("--memory", `${options.resources.memory_mb}m`)
+      const mem = options.resources.memory_mb
+      if (typeof mem === "number" && mem > 0 && isFinite(mem)) {
+        dockerArgs.push("--memory", `${Math.round(mem)}m`)
+      }
     }
     if (options?.resources?.cpu != null) {
-      dockerArgs.push("--cpus", String(options.resources.cpu))
+      const cpu = options.resources.cpu
+      if (typeof cpu === "number" && cpu > 0 && isFinite(cpu)) {
+        dockerArgs.push("--cpus", String(cpu))
+      }
     }
     // Pass environment variables to container
     for (const [key, value] of Object.entries(mergedEnv)) {
