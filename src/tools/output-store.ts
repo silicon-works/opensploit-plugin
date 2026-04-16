@@ -518,11 +518,16 @@ export async function cleanup(): Promise<{ deleted: number }> {
           }
         } catch {
           // If we can't read the file, check file modification time
-          const stat = statSync(filePath)
-          if (stat.mtimeMs < cutoff) {
-            unlinkSync(filePath)
-            deleted++
-            deletedInSession++
+          // Inner try/catch: file may have been deleted between operations
+          try {
+            const stat = statSync(filePath)
+            if (stat.mtimeMs < cutoff) {
+              unlinkSync(filePath)
+              deleted++
+              deletedInSession++
+            }
+          } catch {
+            // File gone — already cleaned up, skip
           }
         }
       }
