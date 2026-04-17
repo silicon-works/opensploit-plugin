@@ -14,7 +14,9 @@
 #   - All inputs validated (session ID, IP, hostname)
 #   - Symlink check on /etc/hosts
 #   - File locking via flock to prevent concurrent corruption
-#   - Atomic write (temp + mv) for remove/purge operations
+#   - Atomic write (temp in /etc + mv for same-filesystem rename)
+#   - Temp file cleanup via trap on failure
+#   - Carriage return stripping for Windows-edited hosts files
 
 set -euo pipefail
 
@@ -37,8 +39,9 @@ validate_session_id() {
 
 validate_entry() {
   local entry="$1"
-  # Must be "IP<whitespace>HOSTNAME" with no control chars or shell metacharacters
-  if [[ ! "$entry" =~ ^[0-9a-fA-F.:]+[[:space:]]+[a-zA-Z0-9._-]+$ ]]; then
+  # Must be "IP<whitespace>HOSTNAME" — IP is dotted decimal or hex:colon IPv6
+  if [[ ! "$entry" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[[:space:]]+[a-zA-Z0-9._-]+$ ]] && \
+     [[ ! "$entry" =~ ^[0-9a-fA-F:]+[[:space:]]+[a-zA-Z0-9._-]+$ ]]; then
     echo "ERROR: Invalid entry: $entry" >&2
     exit 1
   fi
@@ -77,11 +80,15 @@ do_add() {
   (
     flock -x 200 || { echo "ERROR: Could not acquire lock" >&2; exit 1; }
 
-    # Remove existing block for this session first (idempotent add)
+    # Temp file in /etc for same-filesystem atomic rename (HIGH-1/MEDIUM-3 fix)
     local tmp
-    tmp=$(mktemp)
+    tmp=$(mktemp /etc/hosts.opensploit.XXXXXXXXXX)
+    trap 'rm -f "$tmp"' EXIT  # Clean up on failure (MEDIUM-2 fix)
+
+    # Remove existing block for this session first (idempotent add)
     local in_block=0
     while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"  # Strip carriage return (MEDIUM-1 fix)
       if [[ "$line" == "${MARKER_START}${session}" ]]; then
         in_block=1
         continue
@@ -99,13 +106,15 @@ do_add() {
     printf '%s\n' "${MARKER_START}${session}" >> "$tmp"
     for entry in "$@"; do
       # Convert space-separated to tab-separated for /etc/hosts convention
-      printf '%s\n' "$entry" | sed 's/[[:space:]]\+/\t/' >> "$tmp"
+      printf '%s\t%s\n' "${entry%% *}" "${entry#* }" >> "$tmp"
     done
     printf '%s\n' "${MARKER_END}${session}" >> "$tmp"
 
-    # Atomic replace
+    # Atomic replace with correct ownership (HIGH-2 fix)
+    chown root:root "$tmp"
     chmod 644 "$tmp"
     mv "$tmp" "$HOSTS_FILE"
+    trap - EXIT  # Disarm trap after successful mv
 
   ) 200>"$LOCK_FILE"
 }
@@ -123,9 +132,12 @@ do_remove() {
     fi
 
     local tmp
-    tmp=$(mktemp)
+    tmp=$(mktemp /etc/hosts.opensploit.XXXXXXXXXX)
+    trap 'rm -f "$tmp"' EXIT
+
     local in_block=0
     while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
       if [[ "$line" == "${MARKER_START}${session}" ]]; then
         in_block=1
         continue
@@ -139,8 +151,10 @@ do_remove() {
       fi
     done < "$HOSTS_FILE" > "$tmp"
 
+    chown root:root "$tmp"
     chmod 644 "$tmp"
     mv "$tmp" "$HOSTS_FILE"
+    trap - EXIT
 
   ) 200>"$LOCK_FILE"
 }
@@ -151,14 +165,17 @@ do_purge() {
   (
     flock -x 200 || { echo "ERROR: Could not acquire lock" >&2; exit 1; }
 
-    if ! grep -q "^${MARKER_START}\|^${MARKER_END}" "$HOSTS_FILE" 2>/dev/null; then
+    if ! grep -E -q "^${MARKER_START}|^${MARKER_END}" "$HOSTS_FILE" 2>/dev/null; then
       exit 0  # Nothing to purge
     fi
 
     local tmp
-    tmp=$(mktemp)
+    tmp=$(mktemp /etc/hosts.opensploit.XXXXXXXXXX)
+    trap 'rm -f "$tmp"' EXIT
+
     local in_block=0
     while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%$'\r'}"
       case "$line" in
         "${MARKER_START}"*)
           in_block=1
@@ -174,8 +191,10 @@ do_purge() {
       fi
     done < "$HOSTS_FILE" > "$tmp"
 
+    chown root:root "$tmp"
     chmod 644 "$tmp"
     mv "$tmp" "$HOSTS_FILE"
+    trap - EXIT
 
   ) 200>"$LOCK_FILE"
 }
