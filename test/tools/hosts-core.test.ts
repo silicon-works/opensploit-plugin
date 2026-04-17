@@ -393,6 +393,36 @@ describe("removeHostsBlock", () => {
     // Should not have 3+ consecutive blank lines
     expect(result).not.toMatch(/\n{4,}/)
   })
+
+  test("orphaned start marker does NOT eat subsequent lines", () => {
+    const content = [
+      "127.0.0.1 localhost",
+      "# opensploit-session:ses_broken",
+      "10.10.10.1\torphan.htb",
+      "::1 localhost",
+    ].join("\n")
+
+    const result = removeHostsBlock(content, "ses_broken")
+    // The marker line is removed, but subsequent lines are preserved
+    // because we can't tell if they're block entries or system entries
+    expect(result).toContain("127.0.0.1 localhost")
+    expect(result).toContain("::1 localhost")
+    expect(result).not.toContain("opensploit-session")
+  })
+
+  test("orphaned end marker is left alone (not our session's problem)", () => {
+    const content = [
+      "127.0.0.1 localhost",
+      "# end-opensploit-session:ses_abc",
+      "::1 localhost",
+    ].join("\n")
+
+    const result = removeHostsBlock(content, "ses_abc")
+    // Orphaned end marker with no matching start — left as-is
+    // (removeHostsBlock only removes matched pairs for the target session)
+    expect(result).toContain("127.0.0.1 localhost")
+    expect(result).toContain("::1 localhost")
+  })
 })
 
 // =============================================================================

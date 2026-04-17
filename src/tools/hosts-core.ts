@@ -165,30 +165,38 @@ export function parseHostsBlock(content: string, sessionId: string): HostEntry[]
 
 /**
  * Remove all blocks for a specific session from /etc/hosts content.
+ * Uses matched-pair detection to avoid eating content on orphaned markers.
  * Returns the modified content string.
  */
 export function removeHostsBlock(content: string, sessionId: string): string {
   const startMarker = `${MARKER_PREFIX}${sessionId}`
   const endMarker = `${MARKER_END_PREFIX}${sessionId}`
   const lines = content.split("\n")
-  const result: string[] = []
-  let inBlock = false
 
-  for (const line of lines) {
-    if (line.trim() === startMarker) {
-      inBlock = true
-      continue
-    }
-    if (line.trim() === endMarker) {
-      inBlock = false
-      continue
-    }
-    if (!inBlock) {
-      result.push(line)
+  // Phase 1: Find matched start/end pairs and mark their line ranges for removal
+  const removeSet = new Set<number>()
+  let blockStart = -1
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim()
+    if (trimmed === startMarker) {
+      blockStart = i
+    } else if (trimmed === endMarker && blockStart >= 0) {
+      // Matched pair — mark entire range
+      for (let j = blockStart; j <= i; j++) {
+        removeSet.add(j)
+      }
+      blockStart = -1
     }
   }
 
-  // Collapse runs of 3+ blank lines to at most 2
+  // Orphaned start marker (blockStart >= 0): remove only the marker line itself.
+  // We can't safely determine which subsequent lines belong to the block.
+  if (blockStart >= 0) {
+    removeSet.add(blockStart)
+  }
+
+  const result = lines.filter((_, i) => !removeSet.has(i))
   return collapseBlankLines(result.join("\n"))
 }
 

@@ -21,10 +21,7 @@ import { getRootSession } from "../session/hierarchy"
 import {
   validateEntries,
   validateSessionId,
-  formatHostsBlock,
   parseHostsBlock,
-  removeHostsBlock,
-  removeAllBlocks,
   type HostEntry,
 } from "./hosts-core"
 
@@ -57,7 +54,7 @@ export async function isHelperInstalled(): Promise<boolean> {
  */
 async function callHelper(args: string[]): Promise<{ success: boolean; output: string; error: string }> {
   try {
-    const proc = spawn(["sudo", HELPER_PATH, ...args], {
+    const proc = spawn(["sudo", "-n", HELPER_PATH, ...args], {
       stdout: "pipe",
       stderr: "pipe",
     })
@@ -270,7 +267,7 @@ export async function cleanupSessionHosts(sessionId: string): Promise<void> {
 
   // Check if there are actually entries for this session before calling helper
   const content = await readHostsFile()
-  if (!content.includes(`# opensploit-session:${sessionId}`)) return
+  if (!content.includes(`# opensploit-session:${sessionId}\n`)) return
 
   try {
     const result = await callHelper(["remove", sessionId])
