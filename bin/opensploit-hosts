@@ -21,7 +21,7 @@
 set -euo pipefail
 
 HOSTS_FILE="/etc/hosts"
-LOCK_FILE="/var/lock/opensploit-hosts.lock"
+LOCK_FILE="/tmp/opensploit-hosts.lock"
 MARKER_START="# opensploit-session:"
 MARKER_END="# end-opensploit-session:"
 
