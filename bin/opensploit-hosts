@@ -1,0 +1,225 @@
+#!/bin/bash
+# opensploit-hosts — Safe /etc/hosts manager for OpenSploit
+#
+# Installed to /usr/local/bin/opensploit-hosts with a scoped NOPASSWD sudoers entry.
+# Only modifies /etc/hosts between opensploit session markers.
+#
+# Usage:
+#   opensploit-hosts add    SESSION "IP HOSTNAME" ["IP HOSTNAME" ...]
+#   opensploit-hosts remove SESSION
+#   opensploit-hosts purge
+#   opensploit-hosts check
+#
+# Security:
+#   - All inputs validated (session ID, IP, hostname)
+#   - Symlink check on /etc/hosts
+#   - File locking via flock to prevent concurrent corruption
+#   - Atomic write (temp + mv) for remove/purge operations
+
+set -euo pipefail
+
+HOSTS_FILE="/etc/hosts"
+LOCK_FILE="/var/lock/opensploit-hosts.lock"
+MARKER_START="# opensploit-session:"
+MARKER_END="# end-opensploit-session:"
+
+# ---------------------------------------------------------------------------
+# Validation (defense in depth — TypeScript also validates)
+# ---------------------------------------------------------------------------
+
+validate_session_id() {
+  local sid="$1"
+  if [[ ! "$sid" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    echo "ERROR: Invalid session ID" >&2
+    exit 1
+  fi
+}
+
+validate_entry() {
+  local entry="$1"
+  # Must be "IP<whitespace>HOSTNAME" with no control chars or shell metacharacters
+  if [[ ! "$entry" =~ ^[0-9a-fA-F.:]+[[:space:]]+[a-zA-Z0-9._-]+$ ]]; then
+    echo "ERROR: Invalid entry: $entry" >&2
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Safety checks
+# ---------------------------------------------------------------------------
+
+check_hosts_file() {
+  if [[ -L "$HOSTS_FILE" ]]; then
+    echo "ERROR: $HOSTS_FILE is a symlink — refusing to operate" >&2
+    exit 1
+  fi
+  if [[ ! -f "$HOSTS_FILE" ]]; then
+    echo "ERROR: $HOSTS_FILE does not exist" >&2
+    exit 1
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Actions
+# ---------------------------------------------------------------------------
+
+do_add() {
+  local session="$1"
+  shift
+  validate_session_id "$session"
+
+  for entry in "$@"; do
+    validate_entry "$entry"
+  done
+
+  check_hosts_file
+
+  (
+    flock -x 200 || { echo "ERROR: Could not acquire lock" >&2; exit 1; }
+
+    # Remove existing block for this session first (idempotent add)
+    local tmp
+    tmp=$(mktemp)
+    local in_block=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == "${MARKER_START}${session}" ]]; then
+        in_block=1
+        continue
+      fi
+      if [[ "$line" == "${MARKER_END}${session}" ]]; then
+        in_block=0
+        continue
+      fi
+      if [[ $in_block -eq 0 ]]; then
+        printf '%s\n' "$line"
+      fi
+    done < "$HOSTS_FILE" > "$tmp"
+
+    # Append new block
+    printf '%s\n' "${MARKER_START}${session}" >> "$tmp"
+    for entry in "$@"; do
+      # Convert space-separated to tab-separated for /etc/hosts convention
+      printf '%s\n' "$entry" | sed 's/[[:space:]]\+/\t/' >> "$tmp"
+    done
+    printf '%s\n' "${MARKER_END}${session}" >> "$tmp"
+
+    # Atomic replace
+    chmod 644 "$tmp"
+    mv "$tmp" "$HOSTS_FILE"
+
+  ) 200>"$LOCK_FILE"
+}
+
+do_remove() {
+  local session="$1"
+  validate_session_id "$session"
+  check_hosts_file
+
+  (
+    flock -x 200 || { echo "ERROR: Could not acquire lock" >&2; exit 1; }
+
+    if ! grep -q "^${MARKER_START}${session}$" "$HOSTS_FILE" 2>/dev/null; then
+      exit 0  # Nothing to remove
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    local in_block=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == "${MARKER_START}${session}" ]]; then
+        in_block=1
+        continue
+      fi
+      if [[ "$line" == "${MARKER_END}${session}" ]]; then
+        in_block=0
+        continue
+      fi
+      if [[ $in_block -eq 0 ]]; then
+        printf '%s\n' "$line"
+      fi
+    done < "$HOSTS_FILE" > "$tmp"
+
+    chmod 644 "$tmp"
+    mv "$tmp" "$HOSTS_FILE"
+
+  ) 200>"$LOCK_FILE"
+}
+
+do_purge() {
+  check_hosts_file
+
+  (
+    flock -x 200 || { echo "ERROR: Could not acquire lock" >&2; exit 1; }
+
+    if ! grep -q "^${MARKER_START}\|^${MARKER_END}" "$HOSTS_FILE" 2>/dev/null; then
+      exit 0  # Nothing to purge
+    fi
+
+    local tmp
+    tmp=$(mktemp)
+    local in_block=0
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      case "$line" in
+        "${MARKER_START}"*)
+          in_block=1
+          continue
+          ;;
+        "${MARKER_END}"*)
+          in_block=0
+          continue
+          ;;
+      esac
+      if [[ $in_block -eq 0 ]]; then
+        printf '%s\n' "$line"
+      fi
+    done < "$HOSTS_FILE" > "$tmp"
+
+    chmod 644 "$tmp"
+    mv "$tmp" "$HOSTS_FILE"
+
+  ) 200>"$LOCK_FILE"
+}
+
+do_check() {
+  echo "ok"
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+if [[ $# -lt 1 ]]; then
+  echo "Usage: opensploit-hosts {add|remove|purge|check} [SESSION] [entries...]" >&2
+  exit 1
+fi
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+  add)
+    if [[ $# -lt 2 ]]; then
+      echo "Usage: opensploit-hosts add SESSION \"IP HOSTNAME\" [...]" >&2
+      exit 1
+    fi
+    do_add "$@"
+    ;;
+  remove)
+    if [[ $# -lt 1 ]]; then
+      echo "Usage: opensploit-hosts remove SESSION" >&2
+      exit 1
+    fi
+    do_remove "$1"
+    ;;
+  purge)
+    do_purge
+    ;;
+  check)
+    do_check
+    ;;
+  *)
+    echo "ERROR: Unknown action: $ACTION" >&2
+    exit 1
+    ;;
+esac

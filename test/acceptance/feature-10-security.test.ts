@@ -420,11 +420,11 @@ describe("REQ-INT-040/042: hosts tool registration and structure", () => {
     expect(typeof hosts.cleanupSessionHosts).toBe("function")
   })
 
-  test("getSessionsWithHosts is exported for debugging", async () => {
+  test("isHelperInstalled is exported for setup detection", async () => {
     const hosts = await import("../../src/tools/hosts")
-    expect(typeof hosts.getSessionsWithHosts).toBe("function")
-    // Initially empty
-    expect(hosts.getSessionsWithHosts()).toEqual([])
+    expect(typeof hosts.isHelperInstalled).toBe("function")
+    const result = await hosts.isHelperInstalled()
+    expect(typeof result).toBe("boolean")
   })
 })
 

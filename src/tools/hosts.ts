@@ -1,187 +1,140 @@
+/**
+ * Hosts Tool — Manage /etc/hosts entries for hostname resolution.
+ *
+ * Uses a dedicated helper script (opensploit-hosts) installed with a scoped
+ * NOPASSWD sudoers entry. No password prompts during engagements.
+ *
+ * Setup required once:
+ *   sudo cp bin/opensploit-hosts /usr/local/bin/
+ *   sudo chmod 755 /usr/local/bin/opensploit-hosts
+ *   echo "$USER ALL=(ALL) NOPASSWD: /usr/local/bin/opensploit-hosts" | sudo tee /etc/sudoers.d/opensploit
+ *
+ * All validation happens in TypeScript (hosts-core.ts).
+ * The bash helper is a thin I/O layer that trusts its caller.
+ */
+
 import { z } from "zod"
 import { tool, type ToolContext } from "@opencode-ai/plugin"
 import { spawn } from "bun"
 import { createLog } from "../util/log"
 import { getRootSession } from "../session/hierarchy"
+import {
+  validateEntries,
+  validateSessionId,
+  formatHostsBlock,
+  parseHostsBlock,
+  removeHostsBlock,
+  removeAllBlocks,
+  type HostEntry,
+} from "./hosts-core"
 
 const log = createLog("tool.hosts")
 
-// Track hosts entries per session for cleanup
-const sessionHosts = new Map<string, Set<string>>()
+const HELPER_PATH = "/usr/local/bin/opensploit-hosts"
 
-// Marker format for identifying opensploit entries
-const MARKER_START = "# opensploit-session:"
-const MARKER_END = "# end-opensploit-session:"
+// =============================================================================
+// Helper interaction
+// =============================================================================
 
-interface HostEntry {
-  ip: string
-  hostname: string
+/**
+ * Check if the helper script is installed and accessible via sudo without password.
+ */
+export async function isHelperInstalled(): Promise<boolean> {
+  try {
+    const proc = spawn(["sudo", "-n", HELPER_PATH, "check"], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const exitCode = await proc.exited
+    return exitCode === 0
+  } catch {
+    return false
+  }
 }
 
 /**
- * Parse /etc/hosts and extract opensploit-managed entries by session
+ * Call the helper script with sudo.
  */
-async function getHostsContent(): Promise<string> {
+async function callHelper(args: string[]): Promise<{ success: boolean; output: string; error: string }> {
   try {
-    const file = Bun.file("/etc/hosts")
-    return await file.text()
+    const proc = spawn(["sudo", HELPER_PATH, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    const stdout = await new Response(proc.stdout).text()
+    const stderr = await new Response(proc.stderr).text()
+    const exitCode = await proc.exited
+
+    return {
+      success: exitCode === 0,
+      output: stdout.trim(),
+      error: stderr.trim(),
+    }
+  } catch (error) {
+    return {
+      success: false,
+      output: "",
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+/**
+ * Read /etc/hosts content (no sudo needed for reading).
+ */
+async function readHostsFile(): Promise<string> {
+  try {
+    return await Bun.file("/etc/hosts").text()
   } catch {
     return ""
   }
 }
 
-/**
- * Run a command with sudo
- */
-async function runSudo(args: string[]): Promise<{ success: boolean; output: string; error: string }> {
-  const proc = spawn(["sudo", ...args], {
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-
-  const stdout = await new Response(proc.stdout).text()
-  const stderr = await new Response(proc.stderr).text()
-  const exitCode = await proc.exited
-
-  return {
-    success: exitCode === 0,
-    output: stdout,
-    error: stderr,
-  }
+function helperNotInstalledMessage(ctx: ToolContext): string {
+  ctx.metadata({ title: "Hosts: Setup required", metadata: { success: false } })
+  return [
+    "**Hosts helper not installed.**",
+    "",
+    "Run `opensploit setup` or install manually:",
+    "```",
+    "sudo cp bin/opensploit-hosts /usr/local/bin/",
+    "sudo chmod 755 /usr/local/bin/opensploit-hosts",
+    `echo "${process.env.USER} ALL=(ALL) NOPASSWD: /usr/local/bin/opensploit-hosts" | sudo tee /etc/sudoers.d/opensploit`,
+    "```",
+  ].join("\n")
 }
 
-/**
- * Add entries to /etc/hosts with session marker
- */
-async function addHostEntries(sessionId: string, entries: HostEntry[]): Promise<{ success: boolean; error?: string }> {
-  if (entries.length === 0) {
-    return { success: true }
-  }
-
-  // Build the entries block
-  const lines = [
-    `${MARKER_START}${sessionId}`,
-    ...entries.map((e) => `${e.ip}\t${e.hostname}`),
-    `${MARKER_END}${sessionId}`,
-  ]
-  const block = lines.join("\n")
-
-  // Use tee with sudo to append to /etc/hosts
-  const proc = spawn(["sudo", "tee", "-a", "/etc/hosts"], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-
-  // In Bun, stdin is a FileSink with .write() and .end() methods
-  proc.stdin.write("\n" + block + "\n")
-  proc.stdin.end()
-
-  const stderr = await new Response(proc.stderr).text()
-  const exitCode = await proc.exited
-
-  if (exitCode !== 0) {
-    return { success: false, error: stderr || "Failed to write to /etc/hosts" }
-  }
-
-  // Track entries for this session
-  let sessionSet = sessionHosts.get(sessionId)
-  if (!sessionSet) {
-    sessionSet = new Set()
-    sessionHosts.set(sessionId, sessionSet)
-  }
-  for (const entry of entries) {
-    sessionSet.add(`${entry.ip}\t${entry.hostname}`)
-  }
-
-  log.info("added hosts entries", { sessionId, count: entries.length })
-  return { success: true }
-}
-
-/**
- * Remove all entries for a session from /etc/hosts
- */
-async function removeSessionEntries(sessionId: string): Promise<{ success: boolean; error?: string }> {
-  const content = await getHostsContent()
-  if (!content) {
-    return { success: true }
-  }
-
-  const startMarker = `${MARKER_START}${sessionId}`
-  const endMarker = `${MARKER_END}${sessionId}`
-
-  // Check if session has entries
-  if (!content.includes(startMarker)) {
-    sessionHosts.delete(sessionId)
-    return { success: true }
-  }
-
-  // Remove the session block using sed
-  // This removes from start marker to end marker inclusive
-  const sedPattern = `/${startMarker.replace(/[/]/g, "\\/")}/,/${endMarker.replace(/[/]/g, "\\/")}/d`
-
-  const result = await runSudo(["sed", "-i", sedPattern, "/etc/hosts"])
-
-  if (!result.success) {
-    return { success: false, error: result.error || "Failed to remove hosts entries" }
-  }
-
-  sessionHosts.delete(sessionId)
-  log.info("removed hosts entries", { sessionId })
-  return { success: true }
-}
-
-/**
- * List entries for a session
- */
-async function listSessionEntries(sessionId: string): Promise<HostEntry[]> {
-  const content = await getHostsContent()
-  const entries: HostEntry[] = []
-
-  const startMarker = `${MARKER_START}${sessionId}`
-  const endMarker = `${MARKER_END}${sessionId}`
-
-  const lines = content.split("\n")
-  let inSession = false
-
-  for (const line of lines) {
-    if (line.includes(startMarker)) {
-      inSession = true
-      continue
-    }
-    if (line.includes(endMarker)) {
-      inSession = false
-      continue
-    }
-    if (inSession && line.trim() && !line.startsWith("#")) {
-      const parts = line.split(/\s+/)
-      if (parts.length >= 2) {
-        entries.push({ ip: parts[0], hostname: parts[1] })
-      }
-    }
-  }
-
-  return entries
-}
+// =============================================================================
+// Tool definition
+// =============================================================================
 
 const DESCRIPTION = `Manage /etc/hosts entries for hostname resolution during penetration testing.
 
-This tool allows you to add temporary hostname mappings that will be automatically cleaned up when the session ends.
+Adds temporary hostname-to-IP mappings that are tracked per session and
+automatically cleaned up when the session ends.
 
-Use cases:
-- Map target hostnames to IP addresses for web exploitation
-- Configure hostnames for virtual host enumeration
-- Set up hostname resolution for internal network targets
+**Use cases:**
+- Map target hostnames to IP addresses for web exploitation (virtual hosting)
+- Add subdomains discovered during enumeration
+- Configure hostname resolution for internal network targets
 
-IMPORTANT: Requires sudo access. User will be prompted for password if not cached.`
+**Actions:**
+- \`add\`: Add hostname mappings (entries required)
+- \`remove\`: Remove all entries for this session
+- \`list\`: Show current session's hostname mappings
+- \`cleanup\`: Same as remove — clean up all session entries
+- \`purge\`: Remove ALL opensploit entries from /etc/hosts (all sessions)
+
+**Setup required:** Run \`opensploit setup\` once to install the hosts helper.`
 
 export function createHostsTool() {
   return tool({
     description: DESCRIPTION,
     args: {
       action: z
-        .enum(["add", "remove", "list", "cleanup"])
-        .describe("Action to perform: add entries, remove specific entries, list current entries, or cleanup all session entries"),
+        .enum(["add", "remove", "list", "cleanup", "purge"])
+        .describe("Action: add, remove, list, cleanup, or purge"),
       entries: z
         .array(
           z.object({
@@ -190,69 +143,78 @@ export function createHostsTool() {
           })
         )
         .optional()
-        .describe("Entries to add or remove (required for add/remove actions)"),
+        .describe("Entries to add (required for add action)"),
     },
     async execute(params, ctx): Promise<string> {
       const { action, entries } = params
-      // Use root session ID so all agents share the same host entries and cleanup works
       const sessionId = getRootSession(ctx.sessionID)
+
+      // Validate session ID
+      if (!validateSessionId(sessionId)) {
+        ctx.metadata({ title: "Hosts: Error", metadata: { success: false } })
+        return `Error: Invalid session ID format.`
+      }
 
       switch (action) {
         case "add": {
           if (!entries || entries.length === 0) {
-            ctx.metadata({
-              title: "Hosts: Error",
-              metadata: { success: false },
-            })
-            return "Error: No entries provided. Please specify entries with ip and hostname."
+            ctx.metadata({ title: "Hosts: Error", metadata: { success: false } })
+            return "Error: No entries provided. Specify entries with ip and hostname."
           }
 
-          const result = await addHostEntries(sessionId, entries)
+          const validation = validateEntries(entries)
+          if (!validation.valid) {
+            ctx.metadata({ title: "Hosts: Error", metadata: { success: false } })
+            return `Error: ${validation.error}`
+          }
+
+          // Check helper AFTER validation passes
+          if (!(await isHelperInstalled())) {
+            return helperNotInstalledMessage(ctx)
+          }
+
+          // Build arguments: "IP HOSTNAME" pairs
+          const entryArgs = entries.map((e) => `${e.ip} ${e.hostname}`)
+          const result = await callHelper(["add", sessionId, ...entryArgs])
+
           if (!result.success) {
-            ctx.metadata({
-              title: "Hosts: Failed",
-              metadata: { success: false },
-            })
-            return `Failed to add hosts entries: ${result.error}\n\nMake sure sudo is configured and you have permission to modify /etc/hosts.`
+            log.error("hosts add failed", { sessionId, error: result.error })
+            ctx.metadata({ title: "Hosts: Failed", metadata: { success: false } })
+            return `Failed to add hosts entries: ${result.error}`
           }
 
-          const entriesStr = entries.map((e) => `  ${e.ip} -> ${e.hostname}`).join("\n")
+          const entriesStr = entries.map((e) => `  ${e.ip} → ${e.hostname}`).join("\n")
+          log.info("hosts added", { sessionId, count: entries.length })
           ctx.metadata({
             title: `Hosts: Added ${entries.length} entries`,
-            metadata: { success: true, entries },
+            metadata: { success: true, count: entries.length },
           })
-          return `Successfully added ${entries.length} hosts entries:\n${entriesStr}\n\nThese entries will be automatically removed when the session ends.`
+          return `Added ${entries.length} hosts entries:\n${entriesStr}\n\nThese will be removed when the session ends.`
         }
 
-        case "remove": {
-          if (!entries || entries.length === 0) {
-            ctx.metadata({
-              title: "Hosts: Error",
-              metadata: { success: false },
-            })
-            return "Error: No entries provided. Use 'cleanup' action to remove all session entries."
+        case "remove":
+        case "cleanup": {
+          if (!(await isHelperInstalled())) {
+            return helperNotInstalledMessage(ctx)
           }
 
-          // For now, just do a full cleanup if any entries are specified
-          // A more granular remove would require more complex sed patterns
-          const result = await removeSessionEntries(sessionId)
+          const result = await callHelper(["remove", sessionId])
+
           if (!result.success) {
-            ctx.metadata({
-              title: "Hosts: Failed",
-              metadata: { success: false },
-            })
+            log.error("hosts remove failed", { sessionId, error: result.error })
+            ctx.metadata({ title: "Hosts: Failed", metadata: { success: false } })
             return `Failed to remove hosts entries: ${result.error}`
           }
 
-          ctx.metadata({
-            title: "Hosts: Removed entries",
-            metadata: { success: true },
-          })
-          return "Successfully removed session hosts entries."
+          log.info("hosts removed", { sessionId })
+          ctx.metadata({ title: "Hosts: Cleanup complete", metadata: { success: true } })
+          return "Removed all hosts entries for this session."
         }
 
         case "list": {
-          const sessionEntries = await listSessionEntries(sessionId)
+          const content = await readHostsFile()
+          const sessionEntries = parseHostsBlock(content, sessionId)
+
           if (sessionEntries.length === 0) {
             ctx.metadata({
               title: "Hosts: No entries",
@@ -269,47 +231,55 @@ export function createHostsTool() {
           return `Current hosts entries for this session:\n${entriesStr}`
         }
 
-        case "cleanup": {
-          const result = await removeSessionEntries(sessionId)
-          if (!result.success) {
-            ctx.metadata({
-              title: "Hosts: Cleanup failed",
-              metadata: { success: false },
-            })
-            return `Failed to cleanup hosts entries: ${result.error}`
+        case "purge": {
+          if (!(await isHelperInstalled())) {
+            return helperNotInstalledMessage(ctx)
           }
 
-          ctx.metadata({
-            title: "Hosts: Cleanup complete",
-            metadata: { success: true },
-          })
-          return "Successfully cleaned up all hosts entries for this session."
+          const result = await callHelper(["purge"])
+
+          if (!result.success) {
+            log.error("hosts purge failed", { error: result.error })
+            ctx.metadata({ title: "Hosts: Purge failed", metadata: { success: false } })
+            return `Failed to purge hosts entries: ${result.error}`
+          }
+
+          log.info("hosts purged all entries")
+          ctx.metadata({ title: "Hosts: Purged all entries", metadata: { success: true } })
+          return "Purged all opensploit entries from /etc/hosts."
         }
 
         default:
-          ctx.metadata({
-            title: "Hosts: Error",
-            metadata: { success: false },
-          })
+          ctx.metadata({ title: "Hosts: Error", metadata: { success: false } })
           return `Unknown action: ${action}`
       }
     },
   })
 }
 
-/**
- * Cleanup function to be called when session ends
- */
-export async function cleanupSessionHosts(sessionId: string): Promise<void> {
-  if (sessionHosts.has(sessionId)) {
-    log.info("cleaning up session hosts", { sessionId })
-    await removeSessionEntries(sessionId)
-  }
-}
+// =============================================================================
+// Session cleanup (called by event hook when session ends)
+// =============================================================================
 
 /**
- * Get all sessions with hosts entries (for debugging/admin)
+ * Cleanup hosts entries for a session. Called when root session is deleted.
+ * Best-effort — logs errors but doesn't throw.
  */
-export function getSessionsWithHosts(): string[] {
-  return Array.from(sessionHosts.keys())
+export async function cleanupSessionHosts(sessionId: string): Promise<void> {
+  if (!validateSessionId(sessionId)) return
+
+  // Check if there are actually entries for this session before calling helper
+  const content = await readHostsFile()
+  if (!content.includes(`# opensploit-session:${sessionId}`)) return
+
+  try {
+    const result = await callHelper(["remove", sessionId])
+    if (result.success) {
+      log.info("session hosts cleaned up", { sessionId: sessionId.slice(-8) })
+    } else {
+      log.error("session hosts cleanup failed", { sessionId: sessionId.slice(-8), error: result.error })
+    }
+  } catch (error) {
+    log.error("session hosts cleanup error", { error })
+  }
 }
