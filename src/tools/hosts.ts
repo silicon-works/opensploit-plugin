@@ -267,7 +267,10 @@ export async function cleanupSessionHosts(sessionId: string): Promise<void> {
 
   // Check if there are actually entries for this session before calling helper
   const content = await readHostsFile()
-  if (!content.includes(`# opensploit-session:${sessionId}\n`)) return
+  // Use regex with line boundary to avoid substring false positives (ses_abc matching ses_abc123)
+  // while also matching at EOF without trailing newline
+  const markerPattern = new RegExp(`^# opensploit-session:${sessionId}$`, "m")
+  if (!markerPattern.test(content)) return
 
   try {
     const result = await callHelper(["remove", sessionId])
