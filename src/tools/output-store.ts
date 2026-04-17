@@ -19,11 +19,11 @@
  */
 
 import path from "path"
-import os from "os"
-import { mkdirSync, existsSync, writeFileSync, readFileSync, readdirSync, statSync, unlinkSync, rmSync } from "fs"
+import { mkdirSync, existsSync, writeFileSync, readFileSync } from "fs"
 import { randomBytes } from "crypto"
 import { createLog } from "../util/log"
 import { normalize, type OutputRecord } from "../util/output-normalizers"
+import * as SessionDirectory from "../session/directory"
 
 const log = createLog("output-store")
 
@@ -57,11 +57,6 @@ function generateOutputId(): string {
 // Configuration
 const STORE_THRESHOLD = 5000 // chars - store outputs larger than this
 const QUERY_LIMIT_DEFAULT = 50 // max records returned per query
-const RETENTION_MS = 24 * 60 * 60 * 1000 // 24 hours
-
-// Sessions directory for output storage
-// In the fat fork this came from @/training/training-data — here we inline it
-const SESSIONS_DIR = path.join(os.homedir(), ".opensploit", "sessions")
 
 /**
  * Sanitize an ID to prevent path traversal (BUG-OS-1, BUG-OS-2).
@@ -76,10 +71,12 @@ function sanitizeId(id: string, label: string): string {
 
 /**
  * Get outputs directory for a session.
- * ~/.opensploit/sessions/{sessionID}/outputs/
+ * /tmp/opensploit-session-{sessionID}/outputs/
  */
 function getSessionOutputsDir(sessionID: string): string {
-  return path.join(SESSIONS_DIR, sanitizeId(sessionID, "sessionID"), "outputs")
+  const safeId = sanitizeId(sessionID, "sessionID")
+  const sessionDir = SessionDirectory.get(safeId)
+  return path.join(sessionDir, "outputs")
 }
 
 /**
@@ -253,7 +250,7 @@ function formatDirectOutput(data: any, rawOutput: string): string {
 
 /**
  * Get output directory for a session.
- * Uses the session archive: ~/.opensploit/sessions/{sessionID}/outputs/
+ * Uses the session working directory: /tmp/opensploit-session-{sessionID}/outputs/
  */
 function getSessionDir(sessionId: string): string {
   return getSessionOutputsDir(sessionId)
@@ -483,82 +480,18 @@ export async function getRawOutput(sessionId: string, outputId: string): Promise
  * Clean up old outputs (older than retention period).
  */
 export async function cleanup(): Promise<{ deleted: number }> {
-  let deleted = 0
-  const cutoff = Date.now() - RETENTION_MS
-
-  if (!existsSync(SESSIONS_DIR)) {
-    return { deleted: 0 }
-  }
-
-  try {
-    // Iterate through session directories in training folder
-    const sessions = readdirSync(SESSIONS_DIR)
-    for (const sessionId of sessions) {
-      const sessionDir = getSessionOutputsDir(sessionId)
-
-      if (!existsSync(sessionDir)) continue
-
-      if (!statSync(sessionDir).isDirectory()) continue
-
-      const files = readdirSync(sessionDir)
-      let deletedInSession = 0
-
-      for (const file of files) {
-        if (!file.endsWith(".json")) continue
-
-        const filePath = path.join(sessionDir, file)
-        try {
-          const content = readFileSync(filePath, "utf-8")
-          const stored: StoredOutput = JSON.parse(content)
-
-          if (stored.timestamp < cutoff) {
-            unlinkSync(filePath)
-            deleted++
-            deletedInSession++
-          }
-        } catch {
-          // If we can't read the file, check file modification time
-          // Inner try/catch: file may have been deleted between operations
-          try {
-            const stat = statSync(filePath)
-            if (stat.mtimeMs < cutoff) {
-              unlinkSync(filePath)
-              deleted++
-              deletedInSession++
-            }
-          } catch {
-            // File gone — already cleaned up, skip
-          }
-        }
-      }
-
-      // Remove empty session directories
-      const remainingFiles = readdirSync(sessionDir)
-      if (remainingFiles.length === 0) {
-        rmSync(sessionDir, { recursive: true })
-      }
-    }
-
-    if (deleted > 0) {
-      log.info("cleanup completed", { deleted })
-    }
-  } catch (error) {
-    log.error("cleanup failed", { error })
-  }
-
-  return { deleted }
+  // Outputs now live in /tmp/opensploit-session-{id}/outputs/ which is
+  // cleaned up automatically when the session directory is removed.
+  // This function is kept for API compatibility but is a no-op.
+  return { deleted: 0 }
 }
 
 /**
  * Clean up all outputs for a specific session.
  */
-export async function cleanupSession(sessionId: string): Promise<void> {
-  const sessionDir = getSessionDir(sessionId)
-
-  if (existsSync(sessionDir)) {
-    rmSync(sessionDir, { recursive: true })
-    log.info("session cleanup", { sessionId: sessionId.slice(-8) })
-  }
+export async function cleanupSession(_sessionId: string): Promise<void> {
+  // Outputs now live in the session working directory (/tmp/) which is
+  // cleaned up by SessionDirectory.cleanup(). This is a no-op.
 }
 
 /**

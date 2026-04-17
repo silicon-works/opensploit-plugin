@@ -81,6 +81,7 @@ export function create(sessionID: string): string {
     mkdirSync(join(dir, "artifacts"), { recursive: true })
     mkdirSync(join(dir, "artifacts", "screenshots"), { recursive: true })
     mkdirSync(join(dir, "artifacts", "loot"), { recursive: true })
+    mkdirSync(join(dir, "outputs"), { recursive: true })
 
     log.info("created", { sessionID: sessionID.slice(-8), dir })
   }

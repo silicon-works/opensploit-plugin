@@ -22,7 +22,7 @@
 import { describe, test, expect, afterEach } from "bun:test"
 import { existsSync, rmSync } from "fs"
 import { join } from "path"
-import os from "os"
+import { tmpdir } from "os"
 
 import {
   store,
@@ -44,7 +44,7 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const SESSIONS_DIR = join(os.homedir(), ".opensploit", "sessions")
+// Outputs now live in /tmp/opensploit-session-{id}/outputs/
 
 function testSessionId(label: string): string {
   return `f05-${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -73,7 +73,7 @@ const hierarchyToClean: string[] = []
 
 afterEach(() => {
   for (const sid of sessionsToClean) {
-    const dir = join(SESSIONS_DIR, sid)
+    const dir = join(tmpdir(), `opensploit-session-${sid}`)
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -246,7 +246,7 @@ describe("REQ-ARC-028: outputs scoped to sessions (isolation)", () => {
     expect(resultB.error).toContain("not found")
   })
 
-  test("REQ-ARC-028: cleanupSession only removes targeted session outputs", async () => {
+  test("REQ-ARC-028: cleanupSession is a no-op (session dir cleanup handles removal)", async () => {
     const sidA = testSessionId("028-cleanup-A")
     const sidB = testSessionId("028-cleanup-B")
     sessionsToClean.push(sidA, sidB)
@@ -267,12 +267,12 @@ describe("REQ-ARC-028: outputs scoped to sessions (isolation)", () => {
     expect(resultA.stored).toBe(true)
     expect(resultB.stored).toBe(true)
 
-    // Clean up session A only
+    // cleanupSession is now a no-op — session directory cleanup handles removal
     await cleanupSession(sidA)
 
-    // A should be gone
+    // A is still accessible because cleanupSession is a no-op
     const queryA = await query({ sessionId: sidA, outputId: resultA.outputId! })
-    expect(queryA.found).toBe(false)
+    expect(queryA.found).toBe(true)
 
     // B should still exist
     const queryB = await query({ sessionId: sidB, outputId: resultB.outputId! })

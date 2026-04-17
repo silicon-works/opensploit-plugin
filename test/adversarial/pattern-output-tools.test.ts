@@ -91,6 +91,7 @@ import {
   existsSync,
 } from "fs"
 import { join } from "path"
+import { tmpdir } from "os"
 import { randomBytes } from "crypto"
 import type { ToolContext } from "@opencode-ai/plugin"
 import type { PatternSearchResult, PatternQuery } from "../../src/pattern/search"
@@ -167,14 +168,12 @@ function testSessionId(): string {
   return `test-adv-${randomBytes(8).toString("hex")}`
 }
 
-const SESSIONS_DIR = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-
 function plantStoredOutput(
   sessionId: string,
   outputId: string,
   overrides: Partial<StoredOutput> = {},
 ): string {
-  const outputsDir = join(SESSIONS_DIR, sessionId, "outputs")
+  const outputsDir = join(tmpdir(), `opensploit-session-${sessionId}`, "outputs")
   mkdirSync(outputsDir, { recursive: true })
 
   const stored: StoredOutput = {
@@ -194,7 +193,7 @@ function plantStoredOutput(
 }
 
 function cleanupTestSession(sessionId: string) {
-  const sessionDir = join(SESSIONS_DIR, sessionId)
+  const sessionDir = join(tmpdir(), `opensploit-session-${sessionId}`)
   if (existsSync(sessionDir)) {
     rmSync(sessionDir, { recursive: true, force: true })
   }
@@ -1000,7 +999,7 @@ describe("ADVERSARIAL: read-tool-output", () => {
     sessionsToClean.push(sid)
     const outputId = "out_corrupted"
 
-    const outputsDir = join(SESSIONS_DIR, sid, "outputs")
+    const outputsDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     mkdirSync(outputsDir, { recursive: true })
     writeFileSync(join(outputsDir, `${outputId}.json`), "{ not valid json !!!", "utf-8")
 
@@ -1221,8 +1220,8 @@ describe("ADVERSARIAL: read-tool-output", () => {
     )
 
     // Check that the output doesn't leak the internal path structure
+    expect(result.output).not.toContain("opensploit-session-")
     expect(result.output).not.toContain(".opensploit/sessions")
-    expect(result.output).not.toContain(process.env.HOME ?? "/home")
     expect(result.output).toContain("not found")
   })
 

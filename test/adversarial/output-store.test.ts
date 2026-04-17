@@ -119,7 +119,7 @@ function testSessionId(): string {
 
 /**
  * Create a fake StoredOutput JSON file in the expected location.
- * This writes directly to ~/.opensploit/sessions/{sessionId}/outputs/
+ * This writes directly to /tmp/opensploit-session-{sessionId}/outputs/
  * to test query/getMetadata/getRawOutput without going through store().
  */
 function plantStoredOutput(
@@ -127,8 +127,7 @@ function plantStoredOutput(
   outputId: string,
   overrides: Partial<StoredOutput> = {},
 ): string {
-  const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-  const outputsDir = join(sessionsDir, sessionId, "outputs")
+  const outputsDir = join(tmpdir(), `opensploit-session-${sessionId}`, "outputs")
   mkdirSync(outputsDir, { recursive: true })
 
   const stored: StoredOutput = {
@@ -149,8 +148,7 @@ function plantStoredOutput(
 
 /** Clean up a test session's directory */
 function cleanupTestSession(sessionId: string) {
-  const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-  const sessionDir = join(sessionsDir, sessionId)
+  const sessionDir = join(tmpdir(), `opensploit-session-${sessionId}`)
   if (existsSync(sessionDir)) {
     rmSync(sessionDir, { recursive: true, force: true })
   }
@@ -358,8 +356,7 @@ describe("Storage corruption and path traversal", () => {
     sessionsToClean.push(sid)
 
     // Plant a corrupt JSON file
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const outputsDir = join(sessionsDir, sid, "outputs")
+    const outputsDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     mkdirSync(outputsDir, { recursive: true })
     writeFileSync(join(outputsDir, "out_corrupt.json"), "{ INVALID JSON !!!", "utf-8")
 
@@ -377,8 +374,7 @@ describe("Storage corruption and path traversal", () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const outputsDir = join(sessionsDir, sid, "outputs")
+    const outputsDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     mkdirSync(outputsDir, { recursive: true })
     writeFileSync(join(outputsDir, "out_bad.json"), "NOT JSON", "utf-8")
 
@@ -390,8 +386,7 @@ describe("Storage corruption and path traversal", () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const outputsDir = join(sessionsDir, sid, "outputs")
+    const outputsDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     mkdirSync(outputsDir, { recursive: true })
     writeFileSync(join(outputsDir, "out_bad2.json"), "NOT JSON", "utf-8")
 
@@ -941,62 +936,25 @@ describe("Cleanup edge cases", () => {
     expect(meta.found).toBe(true) // Still exists
   })
 
-  test("Cleanup removes expired outputs", async () => {
-    const sid = testSessionId()
-    sessionsToClean.push(sid)
-
-    // Plant an output with very old timestamp
-    const oldTimestamp = Date.now() - 48 * 60 * 60 * 1000 // 48 hours ago
-
-    plantStoredOutput(sid, "out_old", {
-      timestamp: oldTimestamp,
-    })
-
-    const resultBefore = await getMetadata(sid, "out_old")
-    expect(resultBefore.found).toBe(true)
-
-    await cleanup()
-
-    const resultAfter = await getMetadata(sid, "out_old")
-    expect(resultAfter.found).toBe(false) // Should be deleted
-  })
-
-  test("Cleanup removes empty session directories after deleting all outputs", async () => {
-    const sid = testSessionId()
-    // Don't add to sessionsToClean — cleanup should handle it
-
-    const oldTimestamp = Date.now() - 48 * 60 * 60 * 1000
-    plantStoredOutput(sid, "out_to_delete", { timestamp: oldTimestamp })
-
-    await cleanup()
-
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const outputsDir = join(sessionsDir, sid, "outputs")
-    expect(existsSync(outputsDir)).toBe(false)
-
-    // Manual cleanup of parent dir if it remains
-    cleanupTestSession(sid)
-  })
-
-  test("Non-JSON files in outputs directory — ignored by cleanup", async () => {
-    const sid = testSessionId()
-    sessionsToClean.push(sid)
-
-    const sessionsDir = join(process.env.HOME ?? "/tmp", ".opensploit", "sessions")
-    const outputsDir = join(sessionsDir, sid, "outputs")
-    mkdirSync(outputsDir, { recursive: true })
-
-    // Plant a non-JSON file
-    writeFileSync(join(outputsDir, "notes.txt"), "this is not json", "utf-8")
-
-    // Also plant a valid output
-    plantStoredOutput(sid, "out_valid", {
-      timestamp: Date.now() - 48 * 60 * 60 * 1000,
-    })
-
+  test("Cleanup is a no-op (outputs cleaned with session directory)", async () => {
+    // Outputs now live in /tmp/ session directory and are cleaned up
+    // when SessionDirectory.cleanup() removes the session dir
     const result = await cleanup()
-    // JSON file should be cleaned up, .txt should be ignored
-    expect(existsSync(join(outputsDir, "notes.txt"))).toBe(true)
+    expect(result.deleted).toBe(0)
+  })
+
+  test("cleanupSession is a no-op (session dir cleanup handles it)", async () => {
+    const sid = testSessionId()
+    sessionsToClean.push(sid)
+    plantStoredOutput(sid, "out_test")
+
+    // cleanupSession no longer does anything — session dir cleanup handles it
+    await cleanupSession(sid)
+
+    // Output still exists because cleanupSession is a no-op
+    // Real cleanup happens via SessionDirectory.cleanup()
+    const result = await getMetadata(sid, "out_test")
+    expect(result.found).toBe(true)
   })
 })
 

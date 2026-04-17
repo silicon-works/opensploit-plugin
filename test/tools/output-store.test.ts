@@ -1,8 +1,7 @@
 import { describe, expect, test, afterEach } from "bun:test"
 import { join } from "path"
-import { existsSync, readFileSync, mkdirSync, writeFileSync, rmSync, readdirSync, utimesSync } from "fs"
+import { existsSync, readFileSync, mkdirSync, writeFileSync, rmSync, readdirSync } from "fs"
 import { tmpdir } from "os"
-import os from "os"
 import {
   store,
   query,
@@ -31,8 +30,6 @@ import {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const SESSIONS_DIR = join(os.homedir(), ".opensploit", "sessions")
 
 /** Generate a unique session ID to avoid collisions between tests. */
 function testSessionId(): string {
@@ -76,7 +73,7 @@ const sessionsToClean: string[] = []
 
 afterEach(() => {
   for (const sid of sessionsToClean) {
-    const dir = join(SESSIONS_DIR, sid)
+    const dir = join(tmpdir(), `opensploit-session-${sid}`)
     if (existsSync(dir)) {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -509,7 +506,7 @@ describe("output-store.threshold", () => {
     expect(result.stored).toBe(false)
     expect(result.outputId).toBeUndefined()
     // Output directory should not exist
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
+    const outputDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     expect(existsSync(outputDir)).toBe(false)
   })
 
@@ -524,7 +521,7 @@ describe("output-store.threshold", () => {
     expect(result.stored).toBe(true)
     expect(result.outputId).toBeDefined()
     // Output file should exist on disk
-    const outputPath = join(SESSIONS_DIR, sid, "outputs", `${result.outputId}.json`)
+    const outputPath = join(tmpdir(), `opensploit-session-${sid}`, "outputs", `${result.outputId}.json`)
     expect(existsSync(outputPath)).toBe(true)
   })
 
@@ -633,7 +630,7 @@ describe("output-store.file-io", () => {
     const result = await store({ sessionId: sid, tool: "nmap", method: "port_scan", data, rawOutput })
     expect(result.stored).toBe(true)
 
-    const outputPath = join(SESSIONS_DIR, sid, "outputs", `${result.outputId}.json`)
+    const outputPath = join(tmpdir(), `opensploit-session-${sid}`, "outputs", `${result.outputId}.json`)
     const stored: StoredOutput = JSON.parse(readFileSync(outputPath, "utf-8"))
 
     expect(stored.id).toBe(result.outputId)
@@ -651,7 +648,7 @@ describe("output-store.file-io", () => {
     sessionsToClean.push(sid)
 
     const result = await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
-    const outputPath = join(SESSIONS_DIR, sid, "outputs", `${result.outputId}.json`)
+    const outputPath = join(tmpdir(), `opensploit-session-${sid}`, "outputs", `${result.outputId}.json`)
     const stored: StoredOutput = JSON.parse(readFileSync(outputPath, "utf-8"))
     expect(stored.method).toBe("execute")
   })
@@ -892,18 +889,20 @@ describe("output-store.getRawOutput", () => {
 // ===========================================================================
 
 describe("output-store.cleanupSession", () => {
-  test("removes all outputs for a session", async () => {
+  test("cleanupSession is a no-op (session dir cleanup handles removal)", async () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
     await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
     await store({ sessionId: sid, tool: "ffuf", data: ffufData(10), rawOutput: bigString(6000) })
 
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
+    const outputDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     expect(existsSync(outputDir)).toBe(true)
 
+    // cleanupSession is now a no-op — session directory cleanup handles removal
     await cleanupSession(sid)
-    expect(existsSync(outputDir)).toBe(false)
+    // Output dir still exists because cleanupSession is a no-op
+    expect(existsSync(outputDir)).toBe(true)
   })
 
   test("cleanupSession is safe on non-existent session", async () => {
@@ -917,88 +916,32 @@ describe("output-store.cleanupSession", () => {
 // ===========================================================================
 
 describe("output-store.cleanup", () => {
-  test("deletes outputs older than 24 hours", async () => {
+  // cleanup() is now a no-op — outputs live in /tmp/opensploit-session-{id}/outputs/
+  // which are cleaned up by SessionDirectory.cleanup() when the session ends.
+  // These tests verify the no-op behavior and API compatibility.
+
+  test("cleanup is a no-op returning deleted=0", async () => {
     const sid = testSessionId()
     sessionsToClean.push(sid)
 
-    // Store an output
+    // Store an output so there IS data on disk
     const result = await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
     expect(result.stored).toBe(true)
 
-    // Manually backdate the stored file's timestamp to 25 hours ago
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
-    const files = readdirSync(outputDir)
-    expect(files.length).toBe(1)
-
-    const filePath = join(outputDir, files[0])
-    const content = JSON.parse(readFileSync(filePath, "utf-8"))
-    content.timestamp = Date.now() - 25 * 60 * 60 * 1000 // 25 hours ago
-    writeFileSync(filePath, JSON.stringify(content))
-
-    const { deleted } = await cleanup()
-    expect(deleted).toBe(1)
-    expect(existsSync(filePath)).toBe(false)
-  })
-
-  test("preserves outputs newer than 24 hours", async () => {
-    const sid = testSessionId()
-    sessionsToClean.push(sid)
-
-    await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
-
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
-    const filesBefore = readdirSync(outputDir)
-
+    // cleanup() always returns { deleted: 0 } since it's a no-op
     const { deleted } = await cleanup()
     expect(deleted).toBe(0)
 
-    const filesAfter = readdirSync(outputDir)
-    expect(filesAfter.length).toBe(filesBefore.length)
-  })
-
-  test("removes empty session output directories after cleanup", async () => {
-    const sid = testSessionId()
-    sessionsToClean.push(sid)
-
-    await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
-
-    // Backdate to trigger deletion
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
+    // Output file still exists (cleanup didn't touch it)
+    const outputDir = join(tmpdir(), `opensploit-session-${sid}`, "outputs")
     const files = readdirSync(outputDir)
-    const filePath = join(outputDir, files[0])
-    const content = JSON.parse(readFileSync(filePath, "utf-8"))
-    content.timestamp = Date.now() - 25 * 60 * 60 * 1000
-    writeFileSync(filePath, JSON.stringify(content))
-
-    await cleanup()
-    expect(existsSync(outputDir)).toBe(false) // empty dir removed
+    expect(files.length).toBe(1)
   })
 
-  test("handles malformed JSON by falling back to file mtime", async () => {
-    const sid = testSessionId()
-    sessionsToClean.push(sid)
-
-    // Create a valid output first to get the directory
-    await store({ sessionId: sid, tool: "nmap", data: nmapData(10), rawOutput: bigString(6000) })
-
-    const outputDir = join(SESSIONS_DIR, sid, "outputs")
-    // Write a malformed JSON file with old mtime
-    const badFile = join(outputDir, "out_bad_12345678.json")
-    writeFileSync(badFile, "not valid json{{{")
-    // Touch the file to make it old
-    const oldTime = new Date(Date.now() - 25 * 60 * 60 * 1000)
-    utimesSync(badFile, oldTime, oldTime)
-
+  test("cleanup is safe when no sessions exist", async () => {
+    // cleanup() should not throw — it's a no-op
     const { deleted } = await cleanup()
-    expect(deleted).toBeGreaterThanOrEqual(1)
-    expect(existsSync(badFile)).toBe(false)
-  })
-
-  test("safe when SESSIONS_DIR does not exist", async () => {
-    // cleanup() should not throw even if the sessions directory doesn't exist
-    // This is already handled by the existsSync check
-    const { deleted } = await cleanup()
-    // deleted could be 0 or more depending on other test state, but should not throw
+    expect(deleted).toBe(0)
     expect(typeof deleted).toBe("number")
   })
 })
