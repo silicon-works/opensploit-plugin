@@ -10,7 +10,7 @@
  * the test environment, so write operations fail gracefully.
  */
 
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, afterEach } from "bun:test"
 import type { ToolContext } from "@opencode-ai/plugin"
 import { createHostsTool, cleanupSessionHosts, isHelperInstalled } from "../../src/tools/hosts"
 
@@ -33,6 +33,11 @@ function makeContext(sessionId = "test-hosts-session") {
   }
   return { ctx, metadataCalls }
 }
+
+afterEach(async () => {
+  // Clean up any entries written to /etc/hosts during tests
+  await cleanupSessionHosts("test-hosts-session")
+})
 
 describe("tool.hosts", () => {
   // ---------------------------------------------------------------------------
@@ -116,21 +121,19 @@ describe("tool.hosts", () => {
       expect(result).toContain("Invalid hostname")
     })
 
-    test("reports setup required when helper not installed", async () => {
-      // In test env, helper is not installed, so add should report setup required
+    test("add with valid entries either succeeds or reports setup required", async () => {
       const { ctx, metadataCalls } = makeContext()
       const result = await hostsTool.execute(
         { action: "add", entries: [{ ip: "10.10.10.1", hostname: "target.htb" }] },
         ctx
       )
 
-      // Either validation error or setup required
-      const isSetupMsg = result.includes("helper not installed") || result.includes("Setup required")
-      const isValidationErr = result.includes("Invalid")
+      // If helper is installed: succeeds. If not: setup required or failed.
+      const isSuccess = result.includes("Added")
+      const isSetupMsg = result.includes("helper not installed")
       const isFailed = result.includes("Failed")
-      expect(isSetupMsg || isValidationErr || isFailed).toBe(true)
+      expect(isSuccess || isSetupMsg || isFailed).toBe(true)
       expect(metadataCalls).toHaveLength(1)
-      expect(metadataCalls[0].metadata?.success).toBe(false)
     })
   })
 
