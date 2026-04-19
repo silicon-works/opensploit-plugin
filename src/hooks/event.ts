@@ -15,6 +15,7 @@
 
 import { createLog } from "../util/log.js"
 import { getRootSession } from "../session/hierarchy.js"
+import { cleanupSessionHosts } from "../tools/hosts.js"
 import {
   appendEntry,
   writeSessionMeta,
@@ -93,6 +94,9 @@ export async function eventHook(input: { event: any }): Promise<void> {
         break
       case "message.part.updated":
         handlePartUpdated(event)
+        break
+      case "session.deleted":
+        await cleanupSessionHosts(event.properties?.id ?? event.id)
         break
     }
   } catch (error) {

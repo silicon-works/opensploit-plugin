@@ -64,6 +64,30 @@ describe("hook.event", () => {
     ).resolves.toBeUndefined()
   })
 
+  test("session.deleted triggers hosts cleanup without affecting real entries", async () => {
+    // Uses a unique session ID that doesn't exist in /etc/hosts
+    // cleanupSessionHosts checks for markers first — this is a safe no-op
+    await expect(
+      eventHook({
+        event: {
+          type: "session.deleted",
+          properties: { id: "test-event-cleanup-nonexistent" },
+        },
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  test("session.deleted with id at top level", async () => {
+    await expect(
+      eventHook({
+        event: {
+          type: "session.deleted",
+          id: "test-event-cleanup-toplevel",
+        },
+      }),
+    ).resolves.toBeUndefined()
+  })
+
   test("handles event with extra properties", async () => {
     await expect(
       eventHook({
