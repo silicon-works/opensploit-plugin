@@ -35,25 +35,76 @@ describe("hook.compaction", () => {
     const output = { context: [] as string[], prompt: undefined }
     await compactionHook({ sessionID: ROOT }, output)
 
-    expect(output.context).toHaveLength(1)
-    const injected = output.context[0]
-    expect(injected).toContain("CRITICAL")
-    expect(injected).toContain("PRESERVE")
-    expect(injected).toContain("10.10.10.1")
-    expect(injected).toContain("admin")
-    expect(injected).toContain("22")
+    // Should inject engagement state
+    const stateEntry = output.context.find(c => c.includes("ENGAGEMENT STATE"))
+    expect(stateEntry).toBeDefined()
+    expect(stateEntry).toContain("PRESERVE ALL DISCOVERIES")
+    expect(stateEntry).toContain("10.10.10.1")
+    expect(stateEntry).toContain("admin")
+    expect(stateEntry).toContain("22")
+  })
+
+  test("injects objective with strong anti-drift language", async () => {
+    SessionDirectory.create(ROOT)
+    await saveEngagementState(ROOT, {
+      objective: "get root on target.htb",
+      target: { ip: "10.10.10.1" },
+    })
+
+    const output = { context: [] as string[], prompt: undefined }
+    await compactionHook({ sessionID: ROOT }, output)
+
+    const objectiveEntry = output.context.find(c => c.includes("OBJECTIVE"))
+    expect(objectiveEntry).toBeDefined()
+    expect(objectiveEntry).toContain("CRITICAL")
+    expect(objectiveEntry).toContain("MUST PRESERVE VERBATIM")
+    expect(objectiveEntry).toContain("get root on target.htb")
+    expect(objectiveEntry).toContain("MUST NOT deviate")
+  })
+
+  test("injects current phase", async () => {
+    SessionDirectory.create(ROOT)
+    await saveEngagementState(ROOT, {
+      currentPhase: "enumeration",
+      target: { ip: "10.10.10.1" },
+    })
+
+    const output = { context: [] as string[], prompt: undefined }
+    await compactionHook({ sessionID: ROOT }, output)
+
+    const phaseEntry = output.context.find(c => c.includes("CURRENT PHASE"))
+    expect(phaseEntry).toBeDefined()
+    expect(phaseEntry).toContain("enumeration")
+  })
+
+  test("objective + phase + state all injected together", async () => {
+    SessionDirectory.create(ROOT)
+    await saveEngagementState(ROOT, {
+      objective: "get root on target.htb",
+      currentPhase: "exploitation",
+      target: { ip: "10.10.10.1", hostname: "target.htb" },
+      ports: [{ port: 80, protocol: "tcp", service: "http" }],
+      accessLevel: "user",
+    })
+
+    const output = { context: [] as string[], prompt: undefined }
+    await compactionHook({ sessionID: ROOT }, output)
+
+    // Should have objective, phase, and state entries
+    expect(output.context.some(c => c.includes("OBJECTIVE"))).toBe(true)
+    expect(output.context.some(c => c.includes("CURRENT PHASE"))).toBe(true)
+    expect(output.context.some(c => c.includes("ENGAGEMENT STATE"))).toBe(true)
   })
 
   test("preserves existing context entries", async () => {
     SessionDirectory.create(ROOT)
     await saveEngagementState(ROOT, { target: { ip: "10.10.10.1" } })
 
-    const output = { context: ["objective context", "todo context"], prompt: undefined }
+    const output = { context: ["pre-existing context"], prompt: undefined }
     await compactionHook({ sessionID: ROOT }, output)
 
-    expect(output.context[0]).toBe("objective context")
-    expect(output.context[1]).toBe("todo context")
-    expect(output.context.length).toBe(3) // 2 existing + 1 injected
+    expect(output.context[0]).toBe("pre-existing context")
+    expect(output.context.length).toBeGreaterThan(1)
   })
 
   test("does not replace prompt", async () => {
@@ -63,6 +114,23 @@ describe("hook.compaction", () => {
     const output = { context: [], prompt: "custom prompt" as string | undefined }
     await compactionHook({ sessionID: ROOT }, output)
 
-    expect(output.prompt).toBe("custom prompt") // Not modified
+    expect(output.prompt).toBe("custom prompt")
+  })
+
+  test("handles serverUrl for todo fetching gracefully when unavailable", async () => {
+    SessionDirectory.create(ROOT)
+    await saveEngagementState(ROOT, {
+      objective: "test objective",
+      target: { ip: "10.10.10.1" },
+    })
+
+    // Pass a serverUrl that won't respond — should not crash
+    const fakeUrl = new URL("http://localhost:0")
+    const output = { context: [] as string[], prompt: undefined }
+    await compactionHook({ sessionID: ROOT }, output, fakeUrl)
+
+    // Should still inject objective and state even if todos fail
+    expect(output.context.some(c => c.includes("OBJECTIVE"))).toBe(true)
+    expect(output.context.some(c => c.includes("ENGAGEMENT STATE"))).toBe(true)
   })
 })

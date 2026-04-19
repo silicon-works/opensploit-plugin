@@ -1081,10 +1081,11 @@ describe("ATTACK: compaction hook edge cases", () => {
     const output = { context: [] as string[], prompt: undefined }
     await compactionHook({ sessionID: sid }, output)
 
-    expect(output.context.length).toBe(1)
-    expect(output.context[0]).toContain("CRITICAL")
-    expect(output.context[0]).toContain("PRESERVE IN SUMMARY")
-    expect(output.context[0]).toContain("10.10.10.55")
+    expect(output.context.length).toBeGreaterThanOrEqual(1)
+    const stateEntry = output.context.find((c: string) => c.includes("ENGAGEMENT STATE"))
+    expect(stateEntry).toBeDefined()
+    expect(stateEntry).toContain("PRESERVE")
+    expect(stateEntry).toContain("10.10.10.55")
   })
 })
 
@@ -1826,8 +1827,9 @@ describe("ATTACK: full pipeline end-to-end", () => {
     // Step 4: Compact
     const compactOutput = { context: [] as string[], prompt: undefined }
     await compactionHook({ sessionID: sid }, compactOutput)
-    expect(compactOutput.context[0]).toContain("CRITICAL")
-    expect(compactOutput.context[0]).toContain("pipeline.htb")
+    const stateEntry = compactOutput.context.find((c: string) => c.includes("ENGAGEMENT STATE"))
+    expect(stateEntry).toBeDefined()
+    expect(stateEntry).toContain("pipeline.htb")
 
     // Step 5: Verify state history
     const snapshots = await getStateSnapshots(sid)

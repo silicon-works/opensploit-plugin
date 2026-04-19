@@ -28,6 +28,7 @@ import { chatMessageHook } from "./hooks/chat-message.js"
  */
 const OpenSploitPlugin: Plugin = async (ctx, options) => {
   const shell = ctx.$
+  const serverUrl = ctx.serverUrl
 
   return {
     config: async (config: Config) => {
@@ -67,7 +68,8 @@ const OpenSploitPlugin: Plugin = async (ctx, options) => {
 
     "permission.ask": permissionHook,
 
-    "experimental.session.compacting": compactionHook,
+    "experimental.session.compacting": (input: { sessionID: string }, output: { context: string[]; prompt?: string }) =>
+      compactionHook(input, output, serverUrl),
   }
 }
 

@@ -694,13 +694,13 @@ describe("End-to-end: hierarchy + state + injection + permission + compaction", 
     const compactOut = { context: ["Previous conversation summary."], prompt: undefined as string | undefined }
     await compactionHook({ sessionID: CHILD_A }, compactOut)
 
-    expect(compactOut.context.length).toBe(2)
-    const compacted = compactOut.context[1]
-    expect(compacted).toContain("CRITICAL")
-    expect(compacted).toContain("PRESERVE")
-    expect(compacted).toContain("10.10.11.100")
-    expect(compacted).toContain("dbadmin")
-    expect(compacted).toContain("www-data")
+    expect(compactOut.context.length).toBeGreaterThanOrEqual(2)
+    const stateEntry = compactOut.context.find((c: string) => c.includes("ENGAGEMENT STATE"))
+    expect(stateEntry).toBeDefined()
+    expect(stateEntry).toContain("PRESERVE")
+    expect(stateEntry).toContain("10.10.11.100")
+    expect(stateEntry).toContain("dbadmin")
+    expect(stateEntry).toContain("www-data")
 
     // 8. Enable ultrasploit, verify auto-approve
     setUltrasploit(true)

@@ -151,16 +151,16 @@ describe("hook chain: multi-phase pen test with compaction", () => {
     expect(compactOut.context[0]).toBe("You found a login page.")
 
     // Engagement state injected with preservation directive
-    expect(compactOut.context.length).toBe(2)
-    const compactionInjected = compactOut.context[1]
-    expect(compactionInjected).toContain("CRITICAL")
-    expect(compactionInjected).toContain("PRESERVE")
+    expect(compactOut.context.length).toBeGreaterThanOrEqual(2)
+    const stateEntry = compactOut.context.find((c: string) => c.includes("ENGAGEMENT STATE"))
+    expect(stateEntry).toBeDefined()
+    expect(stateEntry).toContain("PRESERVE")
 
     // Contains the full state — ports, creds, vulns
-    expect(compactionInjected).toContain("10.10.11.42")
-    expect(compactionInjected).toContain("22")
-    expect(compactionInjected).toContain("webadmin")
-    expect(compactionInjected).toContain("SQL Injection")
+    expect(stateEntry).toContain("10.10.11.42")
+    expect(stateEntry).toContain("22")
+    expect(stateEntry).toContain("webadmin")
+    expect(stateEntry).toContain("SQL Injection")
 
     // -------------------------------------------------------------------------
     // Step 9: Post-compaction — system-transform still works (reads from disk)
