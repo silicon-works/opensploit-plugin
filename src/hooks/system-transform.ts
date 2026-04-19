@@ -19,7 +19,7 @@
  * - Recent tool search cache
  */
 
-import { getEngagementStateForInjection } from "../tools/engagement-state.js"
+import { getEngagementStateForInjection, loadEngagementState } from "../tools/engagement-state.js"
 import { getRootSession } from "../session/hierarchy.js"
 import * as SessionDirectory from "../session/directory.js"
 import { createLog } from "../util/log.js"
@@ -42,6 +42,19 @@ export async function systemTransformHook(
 
     // Build the injection block
     const parts: string[] = []
+
+    // Objective — pinned at the top with strong anti-drift language
+    // Research (arxiv 2505.02709): explicit goal statements in system prompts
+    // are the single most effective mechanism against objective drift.
+    const state = await loadEngagementState(rootSessionID)
+    if (state?.objective) {
+      parts.push(
+        `## Engagement Objective\n` +
+        `Your sole objective is: ${state.objective}\n` +
+        `Do not deviate from this scope.` +
+        (state.currentPhase ? ` Current phase: ${state.currentPhase}.` : "")
+      )
+    }
 
     // Session directory (if it exists)
     if (SessionDirectory.exists(rootSessionID)) {
