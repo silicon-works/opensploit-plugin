@@ -11,6 +11,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./server": "./src/index.ts",
     "./tui": {
       "import": "./src/tui.tsx",
       "config": {

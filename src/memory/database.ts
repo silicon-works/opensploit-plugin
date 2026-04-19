@@ -13,7 +13,14 @@ if (!process.env["LANCE_LOG"]) {
   process.env["LANCE_LOG"] = "error"
 }
 
-import * as lancedb from "@lancedb/lancedb"
+// Lazy import — LanceDB loads native binaries at import time which can fail
+// when the plugin is loaded via file:// from a different project's process.
+// Dynamic import defers native module resolution to first actual use.
+let _lancedb: typeof import("@lancedb/lancedb") | null = null
+async function getLanceDb() {
+  if (!_lancedb) _lancedb = await import("@lancedb/lancedb")
+  return _lancedb
+}
 import * as fs from "fs/promises"
 import * as path from "path"
 import * as os from "os"
@@ -48,14 +55,14 @@ const PREVIOUS_SCHEMA_VERSION = "6.1"
 // =============================================================================
 
 /** Cached database connection */
-let dbConnection: lancedb.Connection | null = null
+let dbConnection: any | null = null
 
 /**
  * Get or create the LanceDB connection
  *
  * Uses a singleton pattern to reuse the connection across calls.
  */
-export async function getConnection(): Promise<lancedb.Connection> {
+export async function getConnection() {
   if (dbConnection) {
     return dbConnection
   }
@@ -63,6 +70,7 @@ export async function getConnection(): Promise<lancedb.Connection> {
   // Ensure directory exists
   await fs.mkdir(path.dirname(OPENSPLOIT_LANCE_PATH), { recursive: true })
 
+  const lancedb = await getLanceDb()
   dbConnection = await lancedb.connect(OPENSPLOIT_LANCE_PATH)
   return dbConnection
 }

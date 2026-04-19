@@ -16,7 +16,12 @@
  * - Keyword fallback when neither FTS nor vectors available
  */
 
-import * as lancedb from "@lancedb/lancedb"
+// Lazy import — see database.ts for explanation
+let _lancedb: typeof import("@lancedb/lancedb") | null = null
+async function getLanceDb() {
+  if (!_lancedb) _lancedb = await import("@lancedb/lancedb")
+  return _lancedb
+}
 import { createLog } from "../util/log"
 import { getConnection, OPENSPLOIT_LANCE_PATH } from "./database"
 import { VECTOR_DIMENSIONS, type MethodRow } from "./schema"
@@ -196,7 +201,8 @@ export async function importFromLance(
 
   // Recreate FTS index (compatible with TS client)
   try {
-    await table.createIndex("search_text", { config: lancedb.Index.fts(), replace: true })
+    const lb = await getLanceDb()
+    await table.createIndex("search_text", { config: lb.Index.fts(), replace: true })
     log.info("created FTS index on imported tools")
   } catch (error) {
     log.warn("FTS index creation failed on imported tools", { error: String(error) })
@@ -314,7 +320,8 @@ export async function importFromYAML(
 
   // Create FTS index on search_text
   try {
-    await table.createIndex("search_text", { config: lancedb.Index.fts(), replace: true })
+    const lb = await getLanceDb()
+    await table.createIndex("search_text", { config: lb.Index.fts(), replace: true })
     log.info("created FTS index on YAML-imported tools")
   } catch (error) {
     log.warn("FTS index creation failed", { error: String(error) })
