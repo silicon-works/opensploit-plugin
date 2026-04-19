@@ -212,6 +212,33 @@ describe("tool.engagement-state", () => {
       expect(result.target).toBeUndefined()
     })
   })
+
+  describe("objective and currentPhase", () => {
+    test("objective is set and replaced on update", () => {
+      const result = mergeState(
+        { objective: "get root on target.htb" },
+        { objective: "lateral movement to DC" },
+      )
+      expect(result.objective).toBe("lateral movement to DC")
+    })
+
+    test("currentPhase is set and replaced on update", () => {
+      const result = mergeState(
+        { currentPhase: "recon" },
+        { currentPhase: "enumeration" },
+      )
+      expect(result.currentPhase).toBe("enumeration")
+    })
+
+    test("objective survives unrelated updates", () => {
+      const result = mergeState(
+        { objective: "get root on target.htb", accessLevel: "none" },
+        { accessLevel: "user" },
+      )
+      expect(result.objective).toBe("get root on target.htb")
+      expect(result.accessLevel).toBe("user")
+    })
+  })
 })
 
 // =============================================================================

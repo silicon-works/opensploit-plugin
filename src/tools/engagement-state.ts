@@ -150,6 +150,8 @@ const EngagementStateSchema = z.object({
   toolSearchCache: z.array(ToolSearchCacheEntrySchema).optional(),
   accessLevel: z.enum(["none", "user", "root"]).optional(),
   flags: z.array(z.string()).optional(),
+  objective: z.string().optional(),
+  currentPhase: z.string().optional(),
 }).passthrough()
 
 export type EngagementState = z.infer<typeof EngagementStateSchema>
