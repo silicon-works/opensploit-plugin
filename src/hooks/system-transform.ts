@@ -35,7 +35,8 @@ export async function systemTransformHook(
 
     const rootSessionID = getRootSession(input.sessionID)
 
-    // Get engagement state formatted for injection
+    // Load state once for both objective extraction and formatted injection
+    const state = await loadEngagementState(rootSessionID)
     const engagementState = await getEngagementStateForInjection(rootSessionID)
 
     if (!engagementState) return // No state yet — nothing to inject
@@ -46,7 +47,6 @@ export async function systemTransformHook(
     // Objective — pinned at the top with strong anti-drift language
     // Research (arxiv 2505.02709): explicit goal statements in system prompts
     // are the single most effective mechanism against objective drift.
-    const state = await loadEngagementState(rootSessionID)
     if (state?.objective) {
       parts.push(
         `## Engagement Objective\n` +
