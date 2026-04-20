@@ -8,11 +8,7 @@ import yaml from "js-yaml"
 // Lazy import — see memory/database.ts for explanation
 let _lancedb: typeof import("@lancedb/lancedb") | null = null
 async function getLanceDb() {
-  if (!_lancedb) {
-    if (!process.env["LANCE_LOG"]) process.env["LANCE_LOG"] = "error"
-    if (!process.env["RUST_LOG"]) process.env["RUST_LOG"] = "error"
-    _lancedb = await import("@lancedb/lancedb")
-  }
+  if (!_lancedb) _lancedb = await import("@lancedb/lancedb")
   return _lancedb
 }
 import { createLog } from "../util/log"

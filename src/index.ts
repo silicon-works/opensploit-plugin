@@ -1,8 +1,3 @@
-// Suppress LanceDB/Rust native warnings BEFORE any module imports.
-// Must be first — @lancedb/lancedb reads env vars at native module load time.
-if (!process.env["LANCE_LOG"]) process.env["LANCE_LOG"] = "error"
-if (!process.env["RUST_LOG"]) process.env["RUST_LOG"] = "error"
-
 import type { Plugin, Config } from "@opencode-ai/plugin"
 import { loadAgents } from "./agents/index.js"
 import { createMcpTool } from "./tools/mcp-tool.js"
