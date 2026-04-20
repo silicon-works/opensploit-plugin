@@ -5,7 +5,12 @@ import path from "path"
 import os from "os"
 import fs from "fs/promises"
 import yaml from "js-yaml"
-import * as lancedb from "@lancedb/lancedb"
+// Lazy import — see memory/database.ts for explanation
+let _lancedb: typeof import("@lancedb/lancedb") | null = null
+async function getLanceDb() {
+  if (!_lancedb) _lancedb = await import("@lancedb/lancedb")
+  return _lancedb
+}
 import { createLog } from "../util/log"
 import { getRootSession } from "../session/hierarchy"
 import * as SessionDirectory from "../session/directory"
@@ -1019,7 +1024,7 @@ function scoreAndGroupMethods(
 /**
  * FTS-only search on the method-level tools table.
  */
-async function searchFTSOnly(table: lancedb.Table, query: string, limit: number): Promise<any[]> {
+async function searchFTSOnly(table: any, query: string, limit: number): Promise<any[]> {
   const selectColumns = ["id", "tool_id", "method_name", "tool_name", "tool_description",
                          "method_description", "when_to_use", "phases_json",
                          "capabilities_json", "routing_json", "methods_json", "raw_json",
