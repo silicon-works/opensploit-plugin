@@ -18,7 +18,12 @@ if (!process.env["LANCE_LOG"]) {
 // Dynamic import defers native module resolution to first actual use.
 let _lancedb: typeof import("@lancedb/lancedb") | null = null
 async function getLanceDb() {
-  if (!_lancedb) _lancedb = await import("@lancedb/lancedb")
+  if (!_lancedb) {
+    // Suppress native Rust warnings before loading the native module
+    if (!process.env["LANCE_LOG"]) process.env["LANCE_LOG"] = "error"
+    if (!process.env["RUST_LOG"]) process.env["RUST_LOG"] = "error"
+    _lancedb = await import("@lancedb/lancedb")
+  }
   return _lancedb
 }
 import * as fs from "fs/promises"
